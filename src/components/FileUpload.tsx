@@ -1,14 +1,14 @@
-import React, { useState, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Upload, FileText, X, CheckCircle, AlertCircle } from 'lucide-react';
+import { Upload, X, CheckCircle } from 'lucide-react';
 
 interface FileUploadProps {
   onFilesUploaded: (files: File[]) => void;
   uploadedFiles: File[];
 }
 
-const FileUpload: React.FC<FileUploadProps> = ({ onFilesUploaded, uploadedFiles }) => {
+const FileUpload = ({ onFilesUploaded, uploadedFiles }: FileUploadProps) => {
   const [processingFiles, setProcessingFiles] = useState<string[]>([]);
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
@@ -59,15 +59,13 @@ const FileUpload: React.FC<FileUploadProps> = ({ onFilesUploaded, uploadedFiles 
 
   return (
     <div className="space-y-6">
-      <motion.div
+      <div
         {...getRootProps()}
         className={`border-2 border-dashed rounded-xl p-12 text-center cursor-pointer transition-all ${
           isDragActive 
             ? 'border-purple-400 bg-purple-500/10' 
             : 'border-white/20 hover:border-purple-400/50 bg-white/5'
         }`}
-        whileHover={{ scale: 1.02 }}
-        whileTap={{ scale: 0.98 }}
       >
         <input {...getInputProps()} />
         <Upload className={`w-16 h-16 mx-auto mb-4 ${isDragActive ? 'text-purple-400' : 'text-gray-400'}`} />
@@ -80,7 +78,7 @@ const FileUpload: React.FC<FileUploadProps> = ({ onFilesUploaded, uploadedFiles 
         <p className="text-sm text-gray-500">
           Supports PDF, Excel, CSV, and image files
         </p>
-      </motion.div>
+      </div>
 
       <AnimatePresence>
         {uploadedFiles.length > 0 && (

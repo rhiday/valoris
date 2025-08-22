@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { CompanyData, SpendAnalysis, SummaryMetrics } from '../types';
+import type { CompanyData, SpendAnalysis, SummaryMetrics } from '../types';
 import SummaryCards from './SummaryCards';
 import AnalysisTable from './AnalysisTable';
 import LoadingScreen from './LoadingScreen';
@@ -16,7 +16,7 @@ interface DashboardProps {
 
 type ViewState = 'dashboard' | 'review' | 'prioritize' | 'track';
 
-const Dashboard: React.FC<DashboardProps> = ({ companyData }) => {
+const Dashboard = ({ companyData }: DashboardProps) => {
   const [isLoading, setIsLoading] = useState(true);
   const [analysisData, setAnalysisData] = useState<SpendAnalysis[]>([]);
   const [summaryMetrics, setSummaryMetrics] = useState<SummaryMetrics | null>(null);

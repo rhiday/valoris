@@ -1,12 +1,12 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowLeft, TrendingUp, Calendar, CheckCircle, Clock, AlertCircle, Target, BarChart3 } from 'lucide-react';
+import { ArrowLeft, TrendingUp, Calendar, CheckCircle, Clock, AlertCircle, Target } from 'lucide-react';
 
 interface TrackProgressProps {
   onBack: () => void;
 }
 
-const TrackProgress: React.FC<TrackProgressProps> = ({ onBack }) => {
+const TrackProgress = ({ onBack }: TrackProgressProps) => {
   const [timeFrame, setTimeFrame] = useState<'week' | 'month' | 'quarter' | 'year'>('month');
 
   const progressData = {

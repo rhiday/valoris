@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Calendar, DollarSign, Users, AlertTriangle, TrendingUp, Clock, Target } from 'lucide-react';
+import { ArrowLeft, DollarSign, AlertTriangle, Clock, Target, Users } from 'lucide-react';
 
 interface PrioritizeImplementationProps {
   onBack: () => void;
@@ -197,7 +197,6 @@ const PrioritizeImplementation: React.FC<PrioritizeImplementationProps> = ({ onB
 
   const TimelineView = () => {
     const weeks = 24;
-    const currentWeek = 0;
     
     return (
       <div className="bg-white/5 border border-white/10 rounded-xl p-6">

@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { ArrowRight, Building2, Upload, FileText, BarChart3 } from 'lucide-react';
-import { CompanyData } from '../types';
+import type { CompanyData } from '../types';
 import FileUpload from './FileUpload';
 
 interface OnboardingProps {

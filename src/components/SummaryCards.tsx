@@ -1,13 +1,12 @@
-import React from 'react';
 import { motion } from 'framer-motion';
 import { TrendingUp, TrendingDown, DollarSign } from 'lucide-react';
-import { SummaryMetrics } from '../types';
+import type { SummaryMetrics } from '../types';
 
 interface SummaryCardsProps {
   metrics: SummaryMetrics;
 }
 
-const SummaryCards: React.FC<SummaryCardsProps> = ({ metrics }) => {
+const SummaryCards = ({ metrics }: SummaryCardsProps) => {
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-EU', {
       style: 'currency',

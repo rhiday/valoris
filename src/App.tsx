@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import Onboarding from './components/Onboarding';
 import Dashboard from './components/Dashboard';
-import { CompanyData } from './types';
+import type { CompanyData } from './types';
 
 function App() {
   const [currentStep, setCurrentStep] = useState<'onboarding' | 'dashboard'>('onboarding');

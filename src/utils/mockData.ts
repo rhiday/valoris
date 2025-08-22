@@ -1,4 +1,4 @@
-import { SpendAnalysis, SummaryMetrics, CompanyData } from '../types';
+import type { SpendAnalysis, SummaryMetrics, CompanyData } from '../types';
 
 export const generateMockAnalysis = (companyData: CompanyData) => {
   const baseSpend = getBaseSpend(companyData.annualSpend);

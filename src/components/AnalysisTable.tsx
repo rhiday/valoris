@@ -1,13 +1,13 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronDown, Info, ExternalLink } from 'lucide-react';
-import { SpendAnalysis } from '../types';
+import { ChevronDown, Info } from 'lucide-react';
+import type { SpendAnalysis } from '../types';
 
 interface AnalysisTableProps {
   data: SpendAnalysis[];
 }
 
-const AnalysisTable: React.FC<AnalysisTableProps> = ({ data }) => {
+const AnalysisTable = ({ data }: AnalysisTableProps) => {
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
   const [hoveredCell, setHoveredCell] = useState<string | null>(null);
 
@@ -45,7 +45,7 @@ const AnalysisTable: React.FC<AnalysisTableProps> = ({ data }) => {
         </thead>
         <tbody>
           {data.map((item) => (
-            <React.Fragment key={item.id}>
+            <div key={item.id}>
               <motion.tr
                 className="border-b border-white/5 hover:bg-white/5 transition-colors cursor-pointer"
                 onClick={() => toggleExpanded(item.id)}
@@ -160,7 +160,7 @@ const AnalysisTable: React.FC<AnalysisTableProps> = ({ data }) => {
                   </motion.tr>
                 )}
               </AnimatePresence>
-            </React.Fragment>
+            </div>
           ))}
         </tbody>
       </table>

@@ -1,12 +1,12 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowLeft, CheckCircle, AlertCircle, TrendingDown, Clock, Users, FileText, ChevronRight } from 'lucide-react';
+import { ArrowLeft, CheckCircle, AlertCircle, TrendingDown, Clock, FileText, ChevronRight } from 'lucide-react';
 
 interface ReviewRecommendationsProps {
   onBack: () => void;
 }
 
-const ReviewRecommendations: React.FC<ReviewRecommendationsProps> = ({ onBack }) => {
+const ReviewRecommendations = ({ onBack }: ReviewRecommendationsProps) => {
   const [selectedCategory, setSelectedCategory] = useState<string>('software');
   const [approvedItems, setApprovedItems] = useState<Set<string>>(new Set());
 
