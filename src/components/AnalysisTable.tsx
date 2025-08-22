@@ -36,8 +36,7 @@ const AnalysisTable = ({ data }: AnalysisTableProps) => {
         <thead>
           <tr className="border-b border-white/10">
             <th className="text-left py-4 px-4 text-gray-300 font-semibold">General Information</th>
-            <th className="text-right py-4 px-4 text-gray-300 font-semibold">Spend (run-rate), €</th>
-            <th className="text-right py-4 px-4 text-gray-300 font-semibold">Past</th>
+            <th className="text-right py-4 px-4 text-gray-300 font-semibold">Current Spend, €</th>
             <th className="text-right py-4 px-4 text-gray-300 font-semibold">Projected</th>
             <th className="text-right py-4 px-4 text-gray-300 font-semibold">Savings</th>
             <th className="w-8"></th>
