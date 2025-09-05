@@ -172,6 +172,24 @@ const AnalysisTable = ({ data }: AnalysisTableProps) => {
                             </div>
                           </div>
                         </div>
+                        
+                        {/* Vendor Alternatives Section */}
+                        {item.alternatives && item.alternatives.length > 0 && (
+                          <div className="mt-4 pt-4 border-t border-white/10">
+                            <h4 className="text-white font-semibold mb-3">Alternative Vendors</h4>
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                              {item.alternatives.map((alt, altIndex) => (
+                                <div key={altIndex} className="bg-white/5 rounded-lg p-3 border border-white/10">
+                                  <div className="flex items-center justify-between mb-2">
+                                    <h5 className="text-white font-medium text-sm">{alt.vendor}</h5>
+                                    <span className="text-green-400 font-semibold text-sm">{alt.estimatedPrice}</span>
+                                  </div>
+                                  <p className="text-gray-300 text-xs">{alt.feasibility}</p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </td>
                   </motion.tr>

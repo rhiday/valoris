@@ -7,18 +7,53 @@ interface AnalysisResponse {
   summary: SummaryMetrics;
 }
 
-const ANALYSIS_PROMPT = `You are a procurement spend analysis expert. Analyze the provided Excel data and return a JSON response.
+// STAGE 1: Data Normalization Prompt
+const NORMALIZATION_PROMPT = `You are a procurement data analyst. Normalize the provided Excel data into a structured format.
 
-You MUST return a JSON object with EXACTLY this structure:
+Task: Analyze uploaded procurement data and normalize into structured format.
+
+Return a JSON object with this EXACT structure:
+
+{
+  "normalizedData": [
+    {
+      "id": "vendor-1",
+      "vendorName": "Microsoft Corporation",
+      "category": "Software", 
+      "subCategory": "Office Suite",
+      "annualSpend": 450000,
+      "contractDetails": "3-year enterprise agreement, expires Dec 2024",
+      "department": "IT",
+      "additionalInfo": "300 licenses, Office 365 E3 plan"
+    }
+  ]
+}
+
+RULES:
+1. Create one entry for EACH vendor in the data
+2. Category: Software, Cloud, Services, Hardware, or Other
+3. Sub-category: specific type (Office suite, CRM, Consulting, etc.)
+4. Annual Spend: total yearly cost in EUR (numbers only)
+5. Department: IT, Sales, Marketing, HR, Operations, or Finance
+6. Contract Details: terms, renewal dates, usage metrics if available
+7. Additional Info: concatenate other relevant fields
+8. Use existing IDs or generate "vendor-###"
+
+Return ONLY the JSON object, no markdown, no explanation.`;
+
+// STAGE 2: Optimization Analysis Prompt  
+const OPTIMIZATION_PROMPT = `You are a procurement optimization expert. Analyze normalized vendor data and provide optimization recommendations.
+
+Based on the normalized vendor data provided, return a JSON object with this EXACT structure:
 
 {
   "analysis": [
     {
       "id": "vendor-1",
-      "vendor": "Microsoft",
+      "vendor": "Microsoft Corporation",
       "segment": "IT",
       "category": "Software",
-      "type": "Office Suite",
+      "type": "Office Suite", 
       "item": "MS 365 E3",
       "pastSpend": 450000,
       "projectedSpend": 495000,
@@ -26,9 +61,16 @@ You MUST return a JSON object with EXACTLY this structure:
       "savingsRange": "€22,500 to €49,500",
       "savingsPercentage": "-5 to -10%",
       "confidence": 0.92,
+      "alternatives": [
+        {
+          "vendor": "Google Workspace",
+          "estimatedPrice": "€380,000",
+          "feasibility": "High - similar features, 30-day migration"
+        }
+      ],
       "details": {
-        "description": "Optimize licenses based on usage",
-        "implementation": "Review user activity and remove unused licenses",
+        "description": "Optimize licenses based on actual usage patterns",
+        "implementation": "Audit user activity, remove unused licenses, negotiate volume discount",
         "timeline": "30-45 days",
         "riskLevel": "Low"
       }
@@ -46,16 +88,15 @@ You MUST return a JSON object with EXACTLY this structure:
 }
 
 RULES:
-1. Create one analysis entry for EACH vendor in the data
-2. All numbers must be actual numbers, not strings
-3. Segment should be: IT, Sales, Marketing, HR, Operations, or Finance
-4. Category should be: Software, Cloud, Services, or Hardware
-5. Calculate projected spend as past spend * 1.08 to 1.15 (8-15% growth)
-6. Savings range format: "€X to €Y" as a string
-7. Confidence: 0.5 to 1.0 based on optimization potential
-8. Summary must aggregate ALL vendors
+1. Use the normalized data as input for optimization analysis
+2. Provide 1-2 alternatives per vendor with realistic pricing
+3. Calculate projected spend as past spend * 1.08 to 1.15 (8-15% growth)
+4. Include feasibility assessment for each alternative
+5. Confidence: 0.5 to 1.0 based on optimization potential
+6. All numbers must be actual numbers, not strings
+7. Summary must aggregate ALL vendors
 
-Return ONLY the JSON object, no markdown, no explanation, no text before or after.`;
+Return ONLY the JSON object, no markdown, no explanation.`;
 
 export async function analyzeExcelData(excelData: any[]): Promise<AnalysisResponse> {
   if (!OPENAI_API_KEY) {
@@ -63,13 +104,13 @@ export async function analyzeExcelData(excelData: any[]): Promise<AnalysisRespon
     throw new Error('OpenAI API key not configured');
   }
 
+  console.log('\n=== STARTING TWO-STAGE ANALYSIS ===');
   console.log('[OpenAI] Raw Excel data received:', excelData.slice(0, 3));
 
-  // Try multiple preprocessing approaches
+  // Prepare data for analysis
   const cleanedData = preprocessExcelData(excelData);
   console.log('[OpenAI] Cleaned data:', cleanedData.slice(0, 3));
   
-  // If cleaned data is empty or insufficient, try markdown approach
   const shouldUseMarkdown = cleanedData.length === 0 || cleanedData.filter(row => row.spend > 0).length < 2;
   
   let finalData;
@@ -80,15 +121,12 @@ export async function analyzeExcelData(excelData: any[]): Promise<AnalysisRespon
     finalData = cleanedData;
   }
 
-  // Prepare data for OpenAI based on chosen method
+  // Prepare prompt data
   let promptData;
-  
   if (typeof finalData === 'string') {
-    // Markdown table approach
     promptData = finalData;
     console.log('[OpenAI] Using markdown table format');
   } else {
-    // Traditional JSON approach
     const sampleData = finalData.slice(0, 100);
     promptData = {
       totalRows: finalData.length,
@@ -104,7 +142,11 @@ export async function analyzeExcelData(excelData: any[]): Promise<AnalysisRespon
   }
 
   try {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    // ============= STAGE 1: DATA NORMALIZATION =============
+    console.log('\n=== STAGE 1: DATA NORMALIZATION ===');
+    console.log('[Stage 1] Sending data to OpenAI for normalization...');
+    
+    const stage1Response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${OPENAI_API_KEY}`,
@@ -115,54 +157,100 @@ export async function analyzeExcelData(excelData: any[]): Promise<AnalysisRespon
         messages: [
           {
             role: 'system',
-            content: ANALYSIS_PROMPT
+            content: NORMALIZATION_PROMPT
           },
           {
             role: 'user',
             content: typeof promptData === 'string' 
-              ? `Analyze this procurement data table and provide spend optimization recommendations:\n\n${promptData}`
-              : `Analyze this procurement data and provide spend optimization recommendations:\n\n${JSON.stringify(promptData, null, 2)}`
+              ? `Normalize this procurement data:\n\n${promptData}`
+              : `Normalize this procurement data:\n\n${JSON.stringify(promptData, null, 2)}`
           }
         ],
         response_format: { type: 'json_object' },
-        temperature: 0.3, // Lower temperature for more consistent outputs
+        temperature: 0.3,
+        max_tokens: 3000
+      })
+    });
+
+    if (!stage1Response.ok) {
+      const errorData = await stage1Response.json();
+      console.error('[Stage 1] OpenAI API error:', errorData);
+      throw new Error(`Stage 1 OpenAI API error: ${stage1Response.status}`);
+    }
+
+    const stage1Result = await stage1Response.json();
+    const stage1Content = stage1Result.choices[0].message.content;
+    
+    console.log('[Stage 1] Raw response:', stage1Content);
+    
+    let normalizedData;
+    try {
+      const cleanStage1Content = stage1Content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      normalizedData = JSON.parse(cleanStage1Content);
+      console.log('[Stage 1] ✓ NORMALIZED OUTPUT:', JSON.stringify(normalizedData, null, 2));
+    } catch (parseError) {
+      console.error('[Stage 1] Failed to parse normalization response:', parseError);
+      throw new Error('Failed to parse Stage 1 normalization response');
+    }
+
+    // ============= STAGE 2: OPTIMIZATION ANALYSIS =============
+    console.log('\n=== STAGE 2: OPTIMIZATION ANALYSIS ===');
+    console.log('[Stage 2] Feeding normalized data into optimization analysis...');
+    
+    const stage2Response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${OPENAI_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'gpt-3.5-turbo',
+        messages: [
+          {
+            role: 'system',
+            content: OPTIMIZATION_PROMPT
+          },
+          {
+            role: 'user',
+            content: `Provide optimization recommendations for this normalized procurement data:\n\n${JSON.stringify(normalizedData, null, 2)}`
+          }
+        ],
+        response_format: { type: 'json_object' },
+        temperature: 0.3,
         max_tokens: 4000
       })
     });
 
-    if (!response.ok) {
-      const errorData = await response.json();
-      console.error('OpenAI API error response:', errorData);
-      throw new Error(`OpenAI API error: ${response.status} - ${errorData.error?.message || 'Unknown error'}`);
+    if (!stage2Response.ok) {
+      const errorData = await stage2Response.json();
+      console.error('[Stage 2] OpenAI API error:', errorData);
+      throw new Error(`Stage 2 OpenAI API error: ${stage2Response.status}`);
     }
 
-    const result = await response.json();
-    console.log('OpenAI API raw response:', result);
+    const stage2Result = await stage2Response.json();
+    const stage2Content = stage2Result.choices[0].message.content;
     
-    // Get the content from the response
-    const content = result.choices[0].message.content;
-    console.log('OpenAI response content:', content);
+    console.log('[Stage 2] Raw response:', stage2Content);
     
-    // Try to parse the JSON response
     let analysis: AnalysisResponse;
     try {
-      // Remove any markdown code blocks if present
-      const cleanContent = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-      analysis = JSON.parse(cleanContent) as AnalysisResponse;
+      const cleanStage2Content = stage2Content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      analysis = JSON.parse(cleanStage2Content) as AnalysisResponse;
+      console.log('[Stage 2] ✓ OPTIMIZATION OUTPUT:', JSON.stringify(analysis, null, 2));
     } catch (parseError) {
-      console.error('Failed to parse OpenAI response:', parseError);
-      console.error('Raw content:', content);
-      throw new Error('Failed to parse OpenAI response as JSON');
+      console.error('[Stage 2] Failed to parse optimization response:', parseError);
+      console.error('[Stage 2] Raw content:', stage2Content);
+      throw new Error('Failed to parse Stage 2 optimization response');
     }
     
     // Validate the response structure
     if (!analysis.analysis || !Array.isArray(analysis.analysis)) {
-      console.error('Invalid analysis structure:', analysis);
+      console.error('[Stage 2] Invalid analysis structure:', analysis);
       throw new Error('Invalid response structure: missing analysis array');
     }
     
     if (!analysis.summary || typeof analysis.summary !== 'object') {
-      console.error('Invalid summary structure:', analysis);
+      console.error('[Stage 2] Invalid summary structure:', analysis);
       throw new Error('Invalid response structure: missing summary object');
     }
 
@@ -172,9 +260,12 @@ export async function analyzeExcelData(excelData: any[]): Promise<AnalysisRespon
       id: item.id || `vendor-${index + 1}`
     }));
 
+    console.log('\n=== TWO-STAGE ANALYSIS COMPLETE ===');
+    console.log('[Final] Returning optimized analysis with', analysis.analysis.length, 'vendors');
+    
     return analysis;
   } catch (error) {
-    console.error('Error analyzing Excel data:', error);
+    console.error('Error in two-stage analysis:', error);
     throw error;
   }
 }

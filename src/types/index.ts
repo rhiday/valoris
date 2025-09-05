@@ -18,12 +18,19 @@ export interface SpendAnalysis {
   savingsRange: string;
   savingsPercentage: string;
   confidence: number;
+  alternatives?: VendorAlternative[];
   details: {
     description: string;
     implementation: string;
     timeline: string;
     riskLevel: 'Low' | 'Medium' | 'High';
   };
+}
+
+export interface VendorAlternative {
+  vendor: string;
+  estimatedPrice: string;
+  feasibility: string;
 }
 
 export interface UploadedFile {
