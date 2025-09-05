@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { ArrowRight, Building2, Upload, FileText, BarChart3 } from 'lucide-react';
-import type { CompanyData } from '../types';
+import type { CompanyData, SpendAnalysis, SummaryMetrics } from '../types';
 import FileUpload from './FileUpload';
 
 interface OnboardingProps {
-  onComplete: (data: CompanyData) => void;
+  onComplete: (data: CompanyData, analysis?: SpendAnalysis[], summary?: SummaryMetrics) => void;
 }
 
 const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
@@ -17,6 +17,8 @@ const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
     annualSpend: ''
   });
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
+  const [analysisData, setAnalysisData] = useState<SpendAnalysis[] | null>(null);
+  const [summaryData, setSummaryData] = useState<SummaryMetrics | null>(null);
 
   const steps = [
     {
@@ -159,6 +161,11 @@ const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
           <FileUpload 
             onFilesUploaded={setUploadedFiles}
             uploadedFiles={uploadedFiles}
+            onAnalysisComplete={(analysis, summary) => {
+              console.log('[Onboarding] Analysis received from FileUpload:', { analysis, summary });
+              setAnalysisData(analysis);
+              setSummaryData(summary);
+            }}
           />
         </div>
       )
@@ -180,7 +187,8 @@ const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
     if (currentStep < steps.length - 1) {
       setCurrentStep(currentStep + 1);
     } else {
-      onComplete(companyData);
+      // Pass analysis data if available from Excel upload
+      onComplete(companyData, analysisData || undefined, summaryData || undefined);
     }
   };
 

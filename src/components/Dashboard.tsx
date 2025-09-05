@@ -12,19 +12,31 @@ import { ChevronRight } from 'lucide-react';
 
 interface DashboardProps {
   companyData: CompanyData;
+  initialAnalysis?: SpendAnalysis[] | null;
+  initialSummary?: SummaryMetrics | null;
 }
 
 type ViewState = 'dashboard' | 'review' | 'prioritize' | 'track';
 
-const Dashboard = ({ companyData }: DashboardProps) => {
+const Dashboard = ({ companyData, initialAnalysis, initialSummary }: DashboardProps) => {
   const [isLoading, setIsLoading] = useState(true);
   const [analysisData, setAnalysisData] = useState<SpendAnalysis[]>([]);
   const [summaryMetrics, setSummaryMetrics] = useState<SummaryMetrics | null>(null);
   const [currentView, setCurrentView] = useState<ViewState>('dashboard');
 
   useEffect(() => {
-    // Simulate AI processing
     const processData = async () => {
+      // If we have analysis from Excel upload, use it
+      if (initialAnalysis && initialSummary) {
+        console.log('[Dashboard] Using Excel analysis data');
+        setAnalysisData(initialAnalysis);
+        setSummaryMetrics(initialSummary);
+        setIsLoading(false);
+        return;
+      }
+      
+      // Otherwise use mock data
+      console.log('[Dashboard] No Excel analysis, using mock data');
       setIsLoading(true);
       
       // Simulate processing time
@@ -37,7 +49,7 @@ const Dashboard = ({ companyData }: DashboardProps) => {
     };
 
     processData();
-  }, [companyData]);
+  }, [companyData, initialAnalysis, initialSummary]);
 
   if (isLoading) {
     return <LoadingScreen companyName={companyData.name} />;

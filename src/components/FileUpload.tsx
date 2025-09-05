@@ -1,28 +1,100 @@
 import { useState, useCallback } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Upload, X, CheckCircle } from 'lucide-react';
+import { Upload, X, CheckCircle, AlertCircle } from 'lucide-react';
+import { parseExcelFile, analyzeExcelData, hashFile, getCachedAnalysis, cacheAnalysis } from '../services/openai';
+import type { SpendAnalysis, SummaryMetrics } from '../types';
 
 interface FileUploadProps {
   onFilesUploaded: (files: File[]) => void;
   uploadedFiles: File[];
+  onAnalysisComplete?: (analysis: SpendAnalysis[], summary: SummaryMetrics) => void;
 }
 
-const FileUpload = ({ onFilesUploaded, uploadedFiles }: FileUploadProps) => {
+const FileUpload = ({ onFilesUploaded, uploadedFiles, onAnalysisComplete }: FileUploadProps) => {
   const [processingFiles, setProcessingFiles] = useState<string[]>([]);
+  const [analysisStatus, setAnalysisStatus] = useState<Record<string, 'processing' | 'completed' | 'error'>>({});
+  const [errorMessages, setErrorMessages] = useState<Record<string, string>>({});
 
-  const onDrop = useCallback((acceptedFiles: File[]) => {
+  const processExcelFile = async (file: File) => {
+    console.log(`[FileUpload] Starting to process Excel file: ${file.name}`);
+    
+    try {
+      // Check cache first
+      const fileHash = await hashFile(file);
+      const cachedAnalysis = await getCachedAnalysis(fileHash);
+      
+      if (cachedAnalysis) {
+        console.log('[FileUpload] Using cached analysis:', cachedAnalysis);
+        setAnalysisStatus(prev => ({ ...prev, [file.name]: 'completed' }));
+        if (onAnalysisComplete) {
+          onAnalysisComplete(cachedAnalysis.analysis, cachedAnalysis.summary);
+        }
+        return;
+      }
+      
+      // Parse Excel file
+      console.log('[FileUpload] Parsing Excel file...');
+      const excelData = await parseExcelFile(file);
+      console.log('[FileUpload] Excel data parsed:', excelData);
+      
+      // Check if we have API key
+      if (!import.meta.env.VITE_OPENAI_API_KEY) {
+        console.warn('[FileUpload] No OpenAI API key found. Please set VITE_OPENAI_API_KEY in .env file');
+        console.log('[FileUpload] Excel data structure:', {
+          totalRows: excelData.length,
+          columns: Object.keys(excelData[0] || {}),
+          sampleData: excelData.slice(0, 3)
+        });
+        setAnalysisStatus(prev => ({ ...prev, [file.name]: 'error' }));
+        setErrorMessages(prev => ({ ...prev, [file.name]: 'OpenAI API key not configured. Check console for parsed data.' }));
+        return;
+      }
+      
+      // Analyze with OpenAI
+      console.log('[FileUpload] Sending to OpenAI for analysis...');
+      const analysis = await analyzeExcelData(excelData);
+      console.log('[FileUpload] Analysis complete:', analysis);
+      
+      // Cache the result
+      cacheAnalysis(fileHash, analysis);
+      
+      setAnalysisStatus(prev => ({ ...prev, [file.name]: 'completed' }));
+      
+      // Pass to parent component if handler provided
+      if (onAnalysisComplete) {
+        onAnalysisComplete(analysis.analysis, analysis.summary);
+      }
+    } catch (error) {
+      console.error('[FileUpload] Error processing file:', error);
+      setAnalysisStatus(prev => ({ ...prev, [file.name]: 'error' }));
+      setErrorMessages(prev => ({ ...prev, [file.name]: error instanceof Error ? error.message : 'Failed to process file' }));
+    } finally {
+      setProcessingFiles(prev => prev.filter(name => name !== file.name));
+    }
+  };
+
+  const onDrop = useCallback(async (acceptedFiles: File[]) => {
     const newFiles = [...uploadedFiles, ...acceptedFiles];
     onFilesUploaded(newFiles);
     
-    // Simulate processing
-    acceptedFiles.forEach(file => {
-      setProcessingFiles(prev => [...prev, file.name]);
-      setTimeout(() => {
-        setProcessingFiles(prev => prev.filter(name => name !== file.name));
-      }, 2000 + Math.random() * 1000);
-    });
-  }, [uploadedFiles, onFilesUploaded]);
+    // Process Excel files
+    for (const file of acceptedFiles) {
+      if (file.type.includes('excel') || file.type.includes('spreadsheet') || file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
+        setProcessingFiles(prev => [...prev, file.name]);
+        setAnalysisStatus(prev => ({ ...prev, [file.name]: 'processing' }));
+        // Process asynchronously without blocking
+        processExcelFile(file);
+      } else {
+        // For non-Excel files, just mark as completed after a delay
+        setProcessingFiles(prev => [...prev, file.name]);
+        setTimeout(() => {
+          setProcessingFiles(prev => prev.filter(name => name !== file.name));
+          setAnalysisStatus(prev => ({ ...prev, [file.name]: 'completed' }));
+        }, 2000);
+      }
+    }
+  }, [uploadedFiles, onFilesUploaded, onAnalysisComplete]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -108,7 +180,17 @@ const FileUpload = ({ onFilesUploaded, uploadedFiles }: FileUploadProps) => {
                   {processingFiles.includes(file.name) ? (
                     <div className="flex items-center space-x-2 text-yellow-400">
                       <div className="w-4 h-4 border-2 border-yellow-400 border-t-transparent rounded-full animate-spin" />
-                      <span className="text-sm">Processing...</span>
+                      <span className="text-sm">Analyzing...</span>
+                    </div>
+                  ) : analysisStatus[file.name] === 'error' ? (
+                    <div className="flex items-center space-x-2 text-red-400">
+                      <AlertCircle className="w-4 h-4" />
+                      <span className="text-sm" title={errorMessages[file.name]}>Error</span>
+                    </div>
+                  ) : analysisStatus[file.name] === 'completed' ? (
+                    <div className="flex items-center space-x-2 text-green-400">
+                      <CheckCircle className="w-4 h-4" />
+                      <span className="text-sm">Analyzed</span>
                     </div>
                   ) : (
                     <div className="flex items-center space-x-2 text-green-400">

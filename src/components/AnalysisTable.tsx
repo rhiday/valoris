@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown, Info } from 'lucide-react';
 import type { SpendAnalysis } from '../types';
@@ -12,6 +12,16 @@ const AnalysisTable = ({ data }: AnalysisTableProps) => {
   const [hoveredCell, setHoveredCell] = useState<string | null>(null);
 
   const formatCurrency = (amount: number) => {
+    if (amount >= 1000000) {
+      return `€${(amount / 1000000).toFixed(1)}M`;
+    } else if (amount >= 1000) {
+      return `€${(amount / 1000).toFixed(0)}K`;
+    } else {
+      return `€${amount.toFixed(0)}`;
+    }
+  };
+
+  const formatCurrencyFull = (amount: number) => {
     return new Intl.NumberFormat('en-EU', {
       style: 'currency',
       currency: 'EUR',
@@ -31,12 +41,19 @@ const AnalysisTable = ({ data }: AnalysisTableProps) => {
   };
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full">
+    <div className="overflow-x-auto bg-white/5 rounded-xl border border-white/10">
+      <table className="w-full table-fixed min-w-[800px]">
+        <colgroup>
+          <col className="w-2/5" /> {/* Vendor info - largest column */}
+          <col className="w-1/6" /> {/* Current spend */}
+          <col className="w-1/6" /> {/* Projected spend */}
+          <col className="w-1/6" /> {/* Savings */}
+          <col className="w-10" />  {/* Expand button */}
+        </colgroup>
         <thead>
           <tr className="border-b border-white/10">
-            <th className="text-left py-4 px-4 text-gray-300 font-semibold">General Information</th>
-            <th className="text-right py-4 px-4 text-gray-300 font-semibold">Current Spend, €</th>
+            <th className="text-left py-4 px-4 text-gray-300 font-semibold">Vendor Information</th>
+            <th className="text-right py-4 px-4 text-gray-300 font-semibold">Current Spend</th>
             <th className="text-right py-4 px-4 text-gray-300 font-semibold">Projected</th>
             <th className="text-right py-4 px-4 text-gray-300 font-semibold">Savings</th>
             <th className="w-8"></th>
@@ -44,7 +61,7 @@ const AnalysisTable = ({ data }: AnalysisTableProps) => {
         </thead>
         <tbody>
           {data.map((item) => (
-            <div key={item.id}>
+            <React.Fragment key={item.id}>
               <motion.tr
                 className="border-b border-white/5 hover:bg-white/5 transition-colors cursor-pointer"
                 onClick={() => toggleExpanded(item.id)}
@@ -84,24 +101,24 @@ const AnalysisTable = ({ data }: AnalysisTableProps) => {
                   </div>
                 </td>
                 <td className="py-4 px-4 text-right">
-                  <div className="text-white font-mono text-lg">
+                  <div className="text-white font-mono text-lg font-bold" title={formatCurrencyFull(item.pastSpend)}>
                     {formatCurrency(item.pastSpend)}
                   </div>
                 </td>
                 <td className="py-4 px-4 text-right">
-                  <div className="text-white font-mono">
+                  <div className="text-white font-mono font-semibold" title={formatCurrencyFull(item.projectedSpend)}>
                     {formatCurrency(item.projectedSpend)}
                   </div>
                   <div className={`text-sm font-medium ${getChangeColor(item.projectedChange)}`}>
-                    ({item.projectedChange})
+                    {item.projectedChange}
                   </div>
                 </td>
                 <td className="py-4 px-4 text-right">
-                  <div className="text-green-400 font-medium">
+                  <div className="text-green-400 font-semibold text-sm">
                     {item.savingsRange}
                   </div>
-                  <div className="text-green-400 text-sm">
-                    ({item.savingsPercentage})
+                  <div className="text-green-400 text-xs opacity-80">
+                    {item.savingsPercentage}
                   </div>
                 </td>
                 <td className="py-4 px-4">
@@ -113,6 +130,7 @@ const AnalysisTable = ({ data }: AnalysisTableProps) => {
                 </td>
               </motion.tr>
               
+              
               <AnimatePresence>
                 {expandedRow === item.id && (
                   <motion.tr
@@ -120,7 +138,7 @@ const AnalysisTable = ({ data }: AnalysisTableProps) => {
                     animate={{ opacity: 1, height: 'auto' }}
                     exit={{ opacity: 0, height: 0 }}
                   >
-                    <td colSpan={6} className="px-4 pb-4">
+                    <td colSpan={5} className="px-4 pb-4">
                       <div className="bg-white/5 rounded-lg p-4 ml-11">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div>
@@ -159,7 +177,7 @@ const AnalysisTable = ({ data }: AnalysisTableProps) => {
                   </motion.tr>
                 )}
               </AnimatePresence>
-            </div>
+            </React.Fragment>
           ))}
         </tbody>
       </table>
