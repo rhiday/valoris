@@ -98,10 +98,39 @@ RULES:
 
 Return ONLY the JSON object, no markdown, no explanation.`;
 
+// Test OpenAI API connectivity
+async function testOpenAIConnection(): Promise<boolean> {
+  try {
+    const response = await fetch('https://api.openai.com/v1/models', {
+      headers: {
+        'Authorization': `Bearer ${OPENAI_API_KEY}`,
+      }
+    });
+    
+    if (response.ok) {
+      console.log('[OpenAI] API connection test: ✅ Success');
+      return true;
+    } else {
+      console.error('[OpenAI] API connection test: ❌ Failed -', response.status);
+      return false;
+    }
+  } catch (error) {
+    console.error('[OpenAI] API connection test: ❌ Network error -', error);
+    return false;
+  }
+}
+
 export async function analyzeExcelData(excelData: any[]): Promise<AnalysisResponse> {
   if (!OPENAI_API_KEY) {
     console.error('OpenAI API key not found. Using mock data.');
     throw new Error('OpenAI API key not configured');
+  }
+
+  // Test API connection first
+  console.log('[OpenAI] Testing API connection...');
+  const isConnected = await testOpenAIConnection();
+  if (!isConnected) {
+    throw new Error('OpenAI API connection failed - check your API key and network');
   }
 
   console.log('\n=== STARTING TWO-STAGE ANALYSIS ===');
@@ -125,7 +154,7 @@ export async function analyzeExcelData(excelData: any[]): Promise<AnalysisRespon
   let promptData;
   if (typeof finalData === 'string') {
     promptData = finalData;
-    console.log('[OpenAI] Using markdown table format');
+    console.log('[OpenAI] Using markdown table format, size:', promptData.length, 'characters');
   } else {
     const sampleData = finalData.slice(0, 100);
     promptData = {
@@ -138,7 +167,14 @@ export async function analyzeExcelData(excelData: any[]): Promise<AnalysisRespon
         avgSpend: sampleData.reduce((sum, row) => sum + (row.spend || 0), 0) / sampleData.length
       }
     };
-    console.log('[OpenAI] Using JSON format with', promptData.dataQuality.totalVendors, 'vendors');
+    const jsonSize = JSON.stringify(promptData).length;
+    console.log('[OpenAI] Using JSON format with', promptData.dataQuality.totalVendors, 'vendors, size:', jsonSize, 'characters');
+  }
+
+  // Check data size to prevent API errors
+  const dataSize = typeof promptData === 'string' ? promptData.length : JSON.stringify(promptData).length;
+  if (dataSize > 50000) {
+    console.warn('[OpenAI] Large data size detected:', dataSize, 'characters - this may cause API errors');
   }
 
   try {
@@ -173,9 +209,22 @@ export async function analyzeExcelData(excelData: any[]): Promise<AnalysisRespon
     });
 
     if (!stage1Response.ok) {
-      const errorData = await stage1Response.json();
-      console.error('[Stage 1] OpenAI API error:', errorData);
-      throw new Error(`Stage 1 OpenAI API error: ${stage1Response.status}`);
+      const errorText = await stage1Response.text();
+      console.error('[Stage 1] OpenAI API error details:');
+      console.error('Status:', stage1Response.status);
+      console.error('Response:', errorText);
+      console.error('Request body preview:', JSON.stringify({
+        model: 'gpt-3.5-turbo',
+        messages: [{
+          role: 'system',
+          content: NORMALIZATION_PROMPT.substring(0, 200) + '...'
+        }, {
+          role: 'user', 
+          content: (typeof promptData === 'string' ? promptData : JSON.stringify(promptData)).substring(0, 200) + '...'
+        }],
+        dataSize: typeof promptData === 'string' ? promptData.length : JSON.stringify(promptData).length
+      }, null, 2));
+      throw new Error(`Stage 1 OpenAI API error: ${stage1Response.status} - ${errorText}`);
     }
 
     const stage1Result = await stage1Response.json();
@@ -222,9 +271,12 @@ export async function analyzeExcelData(excelData: any[]): Promise<AnalysisRespon
     });
 
     if (!stage2Response.ok) {
-      const errorData = await stage2Response.json();
-      console.error('[Stage 2] OpenAI API error:', errorData);
-      throw new Error(`Stage 2 OpenAI API error: ${stage2Response.status}`);
+      const errorText = await stage2Response.text();
+      console.error('[Stage 2] OpenAI API error details:');
+      console.error('Status:', stage2Response.status);
+      console.error('Response:', errorText);
+      console.error('Normalized data size:', JSON.stringify(normalizedData).length, 'characters');
+      throw new Error(`Stage 2 OpenAI API error: ${stage2Response.status} - ${errorText}`);
     }
 
     const stage2Result = await stage2Response.json();
