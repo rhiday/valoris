@@ -1,16 +1,20 @@
 import { useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
-import Onboarding from './components/Onboarding';
+import Login from './components/Login';
+import UploadPage from './components/UploadPage';
 import Dashboard from './components/Dashboard';
+import Profile from './components/Profile';
 import ChatInterface from './components/chat/ChatInterface';
 import ChatToggleButton from './components/chat/ChatToggleButton';
 import { conversationDataManager, generateFileId, generateMessageId } from './services/conversationData';
-import type { CompanyData, SpendAnalysis, SummaryMetrics } from './types';
+import type { SpendAnalysis, SummaryMetrics } from './types';
 import type { ChatContext, ChatMessage } from './services/conversationData';
 
+type AppState = 'login' | 'upload' | 'dashboard' | 'profile';
+
 function App() {
-  const [currentStep, setCurrentStep] = useState<'onboarding' | 'dashboard'>('onboarding');
-  const [companyData, setCompanyData] = useState<CompanyData | null>(null);
+  const [currentState, setCurrentState] = useState<AppState>('login');
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [excelAnalysis, setExcelAnalysis] = useState<SpendAnalysis[] | null>(null);
   const [excelSummary, setExcelSummary] = useState<SummaryMetrics | null>(null);
   
@@ -25,27 +29,55 @@ function App() {
     topVendors: []
   });
 
-  const handleOnboardingComplete = (data: CompanyData, analysis?: SpendAnalysis[], summary?: SummaryMetrics) => {
-    console.log('[App] Onboarding complete with:', { data, analysis, summary });
-    setCompanyData(data);
+  // User state (simplified for demo)
+  const [user] = useState({
+    name: 'John Smith',
+    email: 'test@valoris.com',
+    company: 'Demo Company'
+  });
+
+  // Login handler
+  const handleLogin = () => {
+    setIsLoggedIn(true);
+    setCurrentState('upload');
+  };
+
+  // Upload completion handler
+  const handleAnalysisComplete = (analysis: SpendAnalysis[], summary: SummaryMetrics) => {
+    console.log('[App] Analysis complete with:', { analysis, summary });
+    setExcelAnalysis(analysis);
+    setExcelSummary(summary);
     
-    if (analysis && summary) {
-      setExcelAnalysis(analysis);
-      setExcelSummary(summary);
-      
-      // Store in conversation data manager
-      const fileId = generateFileId(data.name || 'procurement-analysis');
-      conversationDataManager.storeAnalysis(
-        fileId, 
-        data.name || 'Procurement Analysis',
-        [], // rawData - could be populated if needed
-        analysis, 
-        summary
-      );
-      setChatContext(conversationDataManager.getChatContext(fileId));
-    }
+    // Store in conversation data manager
+    const fileId = generateFileId(user.name || 'procurement-analysis');
+    conversationDataManager.storeAnalysis(
+      fileId, 
+      'Procurement Analysis',
+      [], // rawData - could be populated if needed
+      analysis, 
+      summary
+    );
+    setChatContext(conversationDataManager.getChatContext(fileId));
     
-    setCurrentStep('dashboard');
+    setCurrentState('dashboard');
+  };
+
+  // Navigation handlers
+  const handleProfileClick = () => setCurrentState('profile');
+  const handleBackToDashboard = () => setCurrentState('dashboard');
+  const handleLogout = () => {
+    setIsLoggedIn(false);
+    setCurrentState('login');
+    setExcelAnalysis(null);
+    setExcelSummary(null);
+    setChatContext({ 
+      availableFiles: [], 
+      totalVendors: 0, 
+      totalSpend: 0, 
+      totalSavings: 0, 
+      topCategories: [],
+      topVendors: []
+    });
   };
 
   // Chat message handler
@@ -127,39 +159,59 @@ function App() {
   };
 
   const hasAnalysisData = excelAnalysis && excelAnalysis.length > 0;
+  const showChat = currentState === 'dashboard';
+
+  const renderCurrentView = () => {
+    switch (currentState) {
+      case 'login':
+        return <Login key="login" onLogin={handleLogin} />;
+      case 'upload':
+        return <UploadPage key="upload" onAnalysisComplete={handleAnalysisComplete} />;
+      case 'dashboard':
+        return (
+          <Dashboard 
+            key="dashboard" 
+            companyData={user}
+            initialAnalysis={excelAnalysis}
+            initialSummary={excelSummary}
+            onProfileClick={handleProfileClick}
+            onLogout={handleLogout}
+          />
+        );
+      case 'profile':
+        return <Profile key="profile" onBack={handleBackToDashboard} />;
+      default:
+        return <Login key="login" onLogin={handleLogin} />;
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary-900 via-slate-900 to-primary-900">
       {/* Main Content Area */}
-      <div className={`transition-all duration-300 ${isChatOpen ? 'lg:mr-96' : ''}`}>
+      <div className={`transition-all duration-300 ${isChatOpen && showChat ? 'lg:mr-96' : ''}`}>
         <AnimatePresence mode="wait">
-          {currentStep === 'onboarding' ? (
-            <Onboarding key="onboarding" onComplete={handleOnboardingComplete} />
-          ) : (
-            <Dashboard 
-              key="dashboard" 
-              companyData={companyData!}
-              initialAnalysis={excelAnalysis}
-              initialSummary={excelSummary}
-            />
-          )}
+          {renderCurrentView()}
         </AnimatePresence>
       </div>
       
-      {/* Chat Interface */}
-      <ChatInterface
-        isOpen={isChatOpen}
-        onClose={() => setIsChatOpen(false)}
-        chatContext={chatContext}
-        onSendMessage={handleSendMessage}
-      />
-      
-      {/* Chat Toggle Button */}
-      <ChatToggleButton
-        isOpen={isChatOpen}
-        onClick={() => setIsChatOpen(!isChatOpen)}
-        hasData={hasAnalysisData}
-      />
+      {/* Chat Interface - Only show on dashboard */}
+      {showChat && (
+        <>
+          <ChatInterface
+            isOpen={isChatOpen}
+            onClose={() => setIsChatOpen(false)}
+            chatContext={chatContext}
+            onSendMessage={handleSendMessage}
+          />
+          
+          {/* Chat Toggle Button */}
+          <ChatToggleButton
+            isOpen={isChatOpen}
+            onClick={() => setIsChatOpen(!isChatOpen)}
+            hasData={hasAnalysisData}
+          />
+        </>
+      )}
     </div>
   );
 }

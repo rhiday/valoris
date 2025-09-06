@@ -8,17 +8,19 @@ import ReviewRecommendations from './ReviewRecommendations';
 import PrioritizeImplementation from './PrioritizeImplementation';
 import TrackProgress from './TrackProgress';
 import { generateMockAnalysis } from '../utils/mockData';
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight, User, BarChart3, LogOut } from 'lucide-react';
 
 interface DashboardProps {
   companyData: CompanyData;
   initialAnalysis?: SpendAnalysis[] | null;
   initialSummary?: SummaryMetrics | null;
+  onProfileClick?: () => void;
+  onLogout?: () => void;
 }
 
 type ViewState = 'dashboard' | 'review' | 'prioritize' | 'track';
 
-const Dashboard = ({ companyData, initialAnalysis, initialSummary }: DashboardProps) => {
+const Dashboard = ({ companyData, initialAnalysis, initialSummary, onProfileClick, onLogout }: DashboardProps) => {
   const [isLoading, setIsLoading] = useState(true);
   const [analysisData, setAnalysisData] = useState<SpendAnalysis[]>([]);
   const [summaryMetrics, setSummaryMetrics] = useState<SummaryMetrics | null>(null);
@@ -72,13 +74,71 @@ const Dashboard = ({ companyData, initialAnalysis, initialSummary }: DashboardPr
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      className="min-h-screen p-6"
+      className="min-h-screen"
     >
-      <div className="max-w-7xl mx-auto space-y-8">
-        {/* Header */}
+      {/* Navigation Bar */}
+      <div className="border-b border-white/10 bg-white/5 backdrop-blur-sm">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between py-4">
+            {/* Logo & Title */}
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 bg-purple-500 rounded-lg flex items-center justify-center">
+                  <BarChart3 className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <h1 className="text-xl font-bold text-white">Valoris</h1>
+                  <p className="text-sm text-gray-400">Procurement Analysis</p>
+                </div>
+              </div>
+            </div>
+
+            {/* User Menu */}
+            <div className="flex items-center gap-4">
+              <div className="hidden sm:block text-right">
+                <p className="text-white font-medium">John Smith</p>
+                <p className="text-sm text-gray-400">{companyData.name}</p>
+              </div>
+              
+              {/* Profile Dropdown */}
+              <div className="relative group">
+                <button className="flex items-center gap-2 p-2 text-gray-400 hover:text-white hover:bg-white/10 rounded-lg transition-all">
+                  <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-purple-600 rounded-full flex items-center justify-center text-sm font-bold text-white">
+                    JS
+                  </div>
+                </button>
+                
+                {/* Dropdown Menu */}
+                <div className="absolute right-0 top-full mt-2 w-48 bg-white/10 backdrop-blur-xl border border-white/20 rounded-xl shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
+                  <div className="p-2">
+                    <button
+                      onClick={onProfileClick}
+                      className="w-full flex items-center gap-3 px-3 py-2 text-gray-300 hover:text-white hover:bg-white/10 rounded-lg transition-all text-left"
+                    >
+                      <User className="w-4 h-4" />
+                      Profile & Settings
+                    </button>
+                    <div className="border-t border-white/10 my-2" />
+                    <button
+                      onClick={onLogout}
+                      className="w-full flex items-center gap-3 px-3 py-2 text-gray-300 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all text-left"
+                    >
+                      <LogOut className="w-4 h-4" />
+                      Sign Out
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="max-w-7xl mx-auto space-y-8 p-6">
+        {/* Page Header */}
         <div className="text-center space-y-2">
-          <h1 className="text-4xl font-bold text-white">Procurement Analysis</h1>
-          <p className="text-xl text-gray-300">{companyData.name}</p>
+          <h2 className="text-3xl font-bold text-white">Procurement Dashboard</h2>
+          <p className="text-gray-300">AI-powered insights and optimization opportunities</p>
           <div className="w-24 h-1 bg-purple-500 mx-auto rounded-full" />
         </div>
 
