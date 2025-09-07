@@ -368,7 +368,9 @@ export function cacheAnalysis(fileHash: string, analysis: AnalysisResponse): voi
   // Clean up old cache entries if too many
   if (analysisCache.size > 10) {
     const firstKey = analysisCache.keys().next().value;
-    analysisCache.delete(firstKey);
+    if (firstKey) {
+      analysisCache.delete(firstKey);
+    }
   }
 }
 

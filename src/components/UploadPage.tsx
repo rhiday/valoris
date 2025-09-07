@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowLeft, FileText, Upload, BarChart3, Zap, Shield, CheckCircle } from 'lucide-react';
+import { ArrowLeft, Upload, BarChart3, Zap, Shield, CheckCircle } from 'lucide-react';
 import FileUpload from './FileUpload';
 import type { SpendAnalysis, SummaryMetrics } from '../types';
 
@@ -11,7 +11,7 @@ interface UploadPageProps {
 
 const UploadPage: React.FC<UploadPageProps> = ({ onAnalysisComplete, onBack }) => {
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [, setIsAnalyzing] = useState(false);
 
   const handleFilesUploaded = (files: File[]) => {
     setUploadedFiles(files);

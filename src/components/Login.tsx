@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowRight, BarChart3, Shield, Zap, Users, Mail, Lock, Eye, EyeOff } from 'lucide-react';
+import { ArrowRight, BarChart3, Shield, Zap, Mail, Lock, Eye, EyeOff } from 'lucide-react';
 
 interface LoginProps {
   onLogin: () => void;
