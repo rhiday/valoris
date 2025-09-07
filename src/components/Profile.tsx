@@ -1,9 +1,8 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { 
-  ArrowLeft, User, Mail, Building2, Settings, Bell, Shield, 
-  Download, BarChart3, Calendar, DollarSign, FileText, 
-  Edit3, Save, X, Check 
+import {
+  ArrowLeft, User, Settings, Shield,
+  Edit3, Save, X, BarChart3, FileText
 } from 'lucide-react';
 
 interface ProfileProps {

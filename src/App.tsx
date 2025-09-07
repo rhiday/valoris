@@ -14,7 +14,7 @@ type AppState = 'login' | 'upload' | 'dashboard' | 'profile';
 
 function App() {
   const [currentState, setCurrentState] = useState<AppState>('login');
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [, setIsLoggedIn] = useState(false);
   const [excelAnalysis, setExcelAnalysis] = useState<SpendAnalysis[] | null>(null);
   const [excelSummary, setExcelSummary] = useState<SummaryMetrics | null>(null);
   
@@ -33,7 +33,10 @@ function App() {
   const [user] = useState({
     name: 'John Smith',
     email: 'test@valoris.com',
-    company: 'Demo Company'
+    company: 'Demo Company',
+    industry: 'Technology',
+    employeeCount: '100-500',
+    annualSpend: '€2.5M'
   });
 
   // Login handler
@@ -208,7 +211,7 @@ function App() {
           <ChatToggleButton
             isOpen={isChatOpen}
             onClick={() => setIsChatOpen(!isChatOpen)}
-            hasData={hasAnalysisData}
+            hasData={!!hasAnalysisData}
           />
         </>
       )}
