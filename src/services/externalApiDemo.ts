@@ -266,23 +266,49 @@ function generateEnhancedMockData(excelData: any[]): ExternalApiResponse {
 
 // Helper functions for extracting data from Excel
 function extractVendorName(row: any): string {
+  console.log('[extractVendorName] Row keys:', Object.keys(row));
+  console.log('[extractVendorName] Row data:', row);
+  
+  // Try exact field names first
+  if (row.Supplier) return String(row.Supplier).trim();
+  if (row.supplier) return String(row.supplier).trim();
+  if (row.vendor) return String(row.vendor).trim();
+  
+  // Then try pattern matching
   const keys = Object.keys(row).filter(key => 
     key.toLowerCase().includes('vendor') || 
     key.toLowerCase().includes('supplier') ||
     key.toLowerCase().includes('company')
   );
-  return keys.length > 0 ? String(row[keys[0]] || '').trim() : '';
+  
+  console.log('[extractVendorName] Matching keys:', keys);
+  const result = keys.length > 0 ? String(row[keys[0]] || '').trim() : '';
+  console.log('[extractVendorName] Result:', result);
+  return result;
 }
 
 function extractSpendAmount(row: any): number {
+  console.log('[extractSpendAmount] Row keys:', Object.keys(row));
+  
+  // Try exact field names first
+  if (row.Total_Current_Cost) return Number(row.Total_Current_Cost) || 0;
+  if (row['Total Current Cost']) return Number(row['Total Current Cost']) || 0;
+  if (row.spend) return Number(row.spend) || 0;
+  
+  // Then try pattern matching
   const keys = Object.keys(row).filter(key => 
     key.toLowerCase().includes('spend') || 
     key.toLowerCase().includes('cost') ||
     key.toLowerCase().includes('amount')
   );
+  
+  console.log('[extractSpendAmount] Matching keys:', keys);
+  
   if (keys.length > 0) {
     const value = String(row[keys[0]] || '').replace(/[^\d.,]/g, '');
-    return parseFloat(value.replace(',', '.')) || 0;
+    const result = parseFloat(value.replace(',', '.')) || 0;
+    console.log('[extractSpendAmount] Result:', result);
+    return result;
   }
   return 0;
 }

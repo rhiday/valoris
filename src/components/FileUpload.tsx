@@ -18,6 +18,8 @@ const FileUpload = ({ onFilesUploaded, uploadedFiles, onAnalysisComplete, useEnh
   const [analysisStatus, setAnalysisStatus] = useState<Record<string, 'processing' | 'completed' | 'error'>>({});
   const [errorMessages, setErrorMessages] = useState<Record<string, string>>({});
   const [lastAnalysisData, setLastAnalysisData] = useState<{ analysis: SpendAnalysis[], summary: SummaryMetrics } | null>(null);
+  const [accumulatedData, setAccumulatedData] = useState<any[]>([]);
+  const [filesProcessed, setFilesProcessed] = useState<Set<string>>(new Set());
 
   const processDataFile = async (file: File) => {
     console.log(`[FileUpload] Starting to process data file: ${file.name}, type: ${file.type}`);
@@ -58,46 +60,17 @@ const FileUpload = ({ onFilesUploaded, uploadedFiles, onAnalysisComplete, useEnh
       
       console.log('[FileUpload] Data parsed:', parsedData.slice(0, 3));
       
-      // Choose analysis method based on toggle
-      let analysis;
-      if (useEnhancedAnalysis) {
-        console.log('[FileUpload] Using Enhanced Analysis with external APIs...');
-        analysis = await processWithExternalAPIs(parsedData);
-      } else {
-        // Check if we have OpenAI API key
-        if (!import.meta.env.VITE_OPENAI_API_KEY) {
-          console.warn('[FileUpload] No OpenAI API key found. Please set VITE_OPENAI_API_KEY in .env file');
-          console.log('[FileUpload] Parsed data structure:', {
-            totalRows: parsedData.length,
-            columns: Object.keys(parsedData[0] || {}),
-            sampleData: parsedData.slice(0, 3)
-          });
-          setAnalysisStatus(prev => ({ ...prev, [file.name]: 'error' }));
-          setErrorMessages(prev => ({ ...prev, [file.name]: 'OpenAI API key not configured. Check console for parsed data.' }));
-          return;
-        }
-        
-        // Test OpenAI connectivity first
-        console.log('[FileUpload] Using Standard Analysis with OpenAI...');
-        const isConnected = await testOpenAIConnection();
-        if (!isConnected) {
-          console.error('[FileUpload] OpenAI API connection failed - check API key and network');
-          setAnalysisStatus(prev => ({ ...prev, [file.name]: 'error' }));
-          setErrorMessages(prev => ({ ...prev, [file.name]: 'OpenAI API connection failed. Check API key and network.' }));
-          return;
-        }
-        
-        // Analyze with OpenAI
-        analysis = await analyzeExcelData(parsedData);
-      }
+      // Add file data to accumulated data with file source
+      const fileDataWithSource = parsedData.map(row => ({
+        ...row,
+        _fileSource: file.name
+      }));
       
-      console.log('[FileUpload] Analysis complete:', analysis);
-      
-      // Cache the result
-      cacheAnalysis(fileHash, analysis);
-      
+      setAccumulatedData(prev => [...prev, ...fileDataWithSource]);
+      setFilesProcessed(prev => new Set([...prev, file.name]));
       setAnalysisStatus(prev => ({ ...prev, [file.name]: 'completed' }));
-      setLastAnalysisData(analysis);
+      
+      console.log('[FileUpload] File data added to accumulation. Total records:', accumulatedData.length + fileDataWithSource.length);
       
       // Don't auto-navigate, let user click Continue
       // if (onAnalysisComplete) {
@@ -109,6 +82,50 @@ const FileUpload = ({ onFilesUploaded, uploadedFiles, onAnalysisComplete, useEnh
       setErrorMessages(prev => ({ ...prev, [file.name]: error instanceof Error ? error.message : 'Failed to process file' }));
     } finally {
       setProcessingFiles(prev => prev.filter(name => name !== file.name));
+    }
+  };
+
+  const processAllAccumulatedData = async () => {
+    if (accumulatedData.length === 0) return;
+    
+    console.log('[FileUpload] Processing all accumulated data:', accumulatedData.length, 'records');
+    
+    try {
+      let analysis;
+      if (useEnhancedAnalysis) {
+        console.log('[FileUpload] Using Enhanced Analysis with external APIs...');
+        analysis = await processWithExternalAPIs(accumulatedData);
+      } else {
+        // Check if we have OpenAI API key
+        if (!import.meta.env.VITE_OPENAI_API_KEY) {
+          console.warn('[FileUpload] No OpenAI API key found. Please set VITE_OPENAI_API_KEY in .env file');
+          console.log('[FileUpload] Accumulated data structure:', {
+            totalRows: accumulatedData.length,
+            columns: Object.keys(accumulatedData[0] || {}),
+            sampleData: accumulatedData.slice(0, 3)
+          });
+          return null;
+        }
+        
+        // Test OpenAI connectivity first
+        console.log('[FileUpload] Using Standard Analysis with OpenAI...');
+        const isConnected = await testOpenAIConnection();
+        if (!isConnected) {
+          console.error('[FileUpload] OpenAI API connection failed - check API key and network');
+          return null;
+        }
+        
+        // Analyze with OpenAI
+        analysis = await analyzeExcelData(accumulatedData);
+      }
+      
+      console.log('[FileUpload] Combined analysis complete:', analysis);
+      setLastAnalysisData(analysis);
+      return analysis;
+      
+    } catch (error) {
+      console.error('[FileUpload] Error processing combined data:', error);
+      return null;
     }
   };
 
@@ -288,14 +305,18 @@ const FileUpload = ({ onFilesUploaded, uploadedFiles, onAnalysisComplete, useEnh
           
           {/* Continue button - only enable when processing is complete */}
           <button
-            onClick={() => {
+            onClick={async () => {
+              if (!lastAnalysisData && accumulatedData.length > 0) {
+                // Process accumulated data first
+                await processAllAccumulatedData();
+              }
               if (onAnalysisComplete && lastAnalysisData) {
                 onAnalysisComplete(lastAnalysisData.analysis, lastAnalysisData.summary);
               }
             }}
-            disabled={processingFiles.length > 0 || !lastAnalysisData}
+            disabled={processingFiles.length > 0 || (accumulatedData.length === 0)}
             className={`w-full font-semibold py-3 px-6 rounded-lg transition-all flex items-center justify-center gap-2 group ${
-              processingFiles.length > 0 || !lastAnalysisData
+              processingFiles.length > 0 || accumulatedData.length === 0
                 ? 'bg-gray-600 cursor-not-allowed text-gray-300'
                 : 'bg-purple-600 hover:bg-purple-700 text-white'
             }`}
@@ -305,10 +326,15 @@ const FileUpload = ({ onFilesUploaded, uploadedFiles, onAnalysisComplete, useEnh
                 <div className="w-5 h-5 border-2 border-gray-300 border-t-transparent rounded-full animate-spin" />
                 Analyzing Files...
               </>
-            ) : !lastAnalysisData ? (
+            ) : accumulatedData.length === 0 ? (
               <>
                 <div className="w-5 h-5 border-2 border-gray-300 border-t-transparent rounded-full animate-spin opacity-50" />
-                Waiting for Analysis...
+                Waiting for Files...
+              </>
+            ) : !lastAnalysisData ? (
+              <>
+                Process & Continue
+                <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
               </>
             ) : (
               <>
