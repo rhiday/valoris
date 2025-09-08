@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, ChevronDown, FileText, TrendingUp, DollarSign, Users } from 'lucide-react';
 import ChatMessage from './ChatMessage';
 import ChatInput from './ChatInput';
-import type { ChatContext, ChatMessage as ChatMessageType } from '../../services/conversationData';
+import type { ChatContext } from '../../services/conversationData';
 
 interface ChatInterfaceProps {
   isOpen: boolean;
@@ -58,10 +58,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const currentFile = chatContext.availableFiles.find(file => file.fileId === selectedFileId);
   const messages = currentFile?.conversationHistory || [];
   const hasData = chatContext.availableFiles.length > 0;
-
-  const formatCurrency = (amount: number) => {
-    return `€${(amount / 1000).toFixed(0)}K`;
-  };
 
   const formatLargeCurrency = (amount: number) => {
     if (amount >= 1000000) {

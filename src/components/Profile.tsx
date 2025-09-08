@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { 
-  ArrowLeft, User, Mail, Building2, Settings, Bell, Shield, 
-  Download, BarChart3, Calendar, DollarSign, FileText, 
-  Edit3, Save, X, Check 
+  ArrowLeft, User, Settings, Shield, 
+  BarChart3, FileText, 
+  Edit3, Save, X 
 } from 'lucide-react';
 
 interface ProfileProps {

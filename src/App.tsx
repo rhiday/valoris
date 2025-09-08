@@ -1,11 +1,14 @@
-import { useState } from 'react';
+import { useState, Suspense, lazy } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import Login from './components/Login';
 import UploadPage from './components/UploadPage';
 import Dashboard from './components/Dashboard';
-import Profile from './components/Profile';
-import ChatInterface from './components/chat/ChatInterface';
+import LoadingScreen from './components/LoadingScreen';
 import ChatToggleButton from './components/chat/ChatToggleButton';
+
+// Lazy load non-critical components for better performance
+const Profile = lazy(() => import('./components/Profile'));
+const ChatInterface = lazy(() => import('./components/chat/ChatInterface'));
 import { conversationDataManager, generateFileId, generateMessageId } from './services/conversationData';
 import type { SpendAnalysis, SummaryMetrics } from './types';
 import type { ChatContext, ChatMessage } from './services/conversationData';
@@ -14,7 +17,6 @@ type AppState = 'login' | 'upload' | 'dashboard' | 'profile';
 
 function App() {
   const [currentState, setCurrentState] = useState<AppState>('login');
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [excelAnalysis, setExcelAnalysis] = useState<SpendAnalysis[] | null>(null);
   const [excelSummary, setExcelSummary] = useState<SummaryMetrics | null>(null);
   
@@ -31,14 +33,14 @@ function App() {
 
   // User state (simplified for demo)
   const [user] = useState({
-    name: 'John Smith',
-    email: 'test@valoris.com',
-    company: 'Demo Company'
+    name: 'Demo Company',
+    industry: 'Technology',
+    employeeCount: '100-500',
+    annualSpend: '1-5M'
   });
 
   // Login handler
   const handleLogin = () => {
-    setIsLoggedIn(true);
     setCurrentState('upload');
   };
 
@@ -66,7 +68,6 @@ function App() {
   const handleProfileClick = () => setCurrentState('profile');
   const handleBackToDashboard = () => setCurrentState('dashboard');
   const handleLogout = () => {
-    setIsLoggedIn(false);
     setCurrentState('login');
     setExcelAnalysis(null);
     setExcelSummary(null);
@@ -179,7 +180,11 @@ function App() {
           />
         );
       case 'profile':
-        return <Profile key="profile" onBack={handleBackToDashboard} />;
+        return (
+          <Suspense fallback={<LoadingScreen companyName={user.name} />}>
+            <Profile key="profile" onBack={handleBackToDashboard} />
+          </Suspense>
+        );
       default:
         return <Login key="login" onLogin={handleLogin} />;
     }
@@ -197,18 +202,20 @@ function App() {
       {/* Chat Interface - Only show on dashboard */}
       {showChat && (
         <>
-          <ChatInterface
-            isOpen={isChatOpen}
-            onClose={() => setIsChatOpen(false)}
-            chatContext={chatContext}
-            onSendMessage={handleSendMessage}
-          />
+          <Suspense fallback={<div />}>
+            <ChatInterface
+              isOpen={isChatOpen}
+              onClose={() => setIsChatOpen(false)}
+              chatContext={chatContext}
+              onSendMessage={handleSendMessage}
+            />
+          </Suspense>
           
           {/* Chat Toggle Button */}
           <ChatToggleButton
             isOpen={isChatOpen}
             onClick={() => setIsChatOpen(!isChatOpen)}
-            hasData={hasAnalysisData}
+            hasData={!!hasAnalysisData}
           />
         </>
       )}

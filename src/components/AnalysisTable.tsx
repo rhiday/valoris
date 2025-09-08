@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, memo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown, Info } from 'lucide-react';
 import type { SpendAnalysis } from '../types';
@@ -36,9 +36,9 @@ const AnalysisTable = ({ data }: AnalysisTableProps) => {
     return 'text-gray-400';
   };
 
-  const toggleExpanded = (id: string) => {
-    setExpandedRow(expandedRow === id ? null : id);
-  };
+  const toggleExpanded = useCallback((id: string) => {
+    setExpandedRow(prev => prev === id ? null : id);
+  }, []);
 
   return (
     <div className="overflow-x-auto bg-white/5 rounded-xl border border-white/10">
@@ -201,4 +201,4 @@ const AnalysisTable = ({ data }: AnalysisTableProps) => {
   );
 };
 
-export default AnalysisTable;
+export default memo(AnalysisTable);

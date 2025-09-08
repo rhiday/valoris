@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, memo } from 'react';
 import { motion } from 'framer-motion';
 import type { CompanyData, SpendAnalysis, SummaryMetrics } from '../types';
 import SummaryCards from './SummaryCards';
@@ -205,4 +205,4 @@ const Dashboard = ({ companyData, initialAnalysis, initialSummary, onProfileClic
   );
 };
 
-export default Dashboard;
+export default memo(Dashboard);

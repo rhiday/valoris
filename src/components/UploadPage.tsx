@@ -115,7 +115,7 @@ const UploadPage: React.FC<UploadPageProps> = ({ onAnalysisComplete, onBack }) =
           transition={{ delay: 0.4 }}
           className="grid md:grid-cols-3 gap-6 mb-16"
         >
-          {howItWorks.map((step, index) => (
+          {howItWorks.map((step, _index) => (
             <div key={step.title} className="text-center">
               <div className="w-12 h-12 bg-purple-500/20 rounded-lg flex items-center justify-center mx-auto mb-3">
                 <step.icon className="w-6 h-6 text-purple-400" />

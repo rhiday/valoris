@@ -116,10 +116,13 @@ const FileUpload = ({ onFilesUploaded, uploadedFiles, onAnalysisComplete }: File
             setLastAnalysisData({
               analysis: [],
               summary: {
-                totalSpend: 0,
-                potentialSavings: 0,
-                vendorCount: 0,
-                avgSavingsPercentage: 0
+                pastSpend: 0,
+                projectedSpend: 0,
+                potentialSavings: {
+                  min: 0,
+                  max: 0
+                },
+                roi: 0
               }
             });
           }

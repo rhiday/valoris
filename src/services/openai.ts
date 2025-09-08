@@ -126,6 +126,29 @@ export async function analyzeExcelData(excelData: any[]): Promise<AnalysisRespon
     throw new Error('OpenAI API key not configured');
   }
 
+  // Create a hash of the data to prevent duplicate requests
+  const dataHash = await generateDataHash(JSON.stringify(excelData));
+  
+  // Check if there's already an active request for this data
+  if (activeRequests.has(dataHash)) {
+    console.log('[OpenAI] Reusing active request for identical data');
+    return await activeRequests.get(dataHash)!;
+  }
+
+  // Create the request promise and store it to prevent duplicates
+  const requestPromise = performAnalysis(excelData, dataHash);
+  activeRequests.set(dataHash, requestPromise);
+  
+  try {
+    const result = await requestPromise;
+    return result;
+  } finally {
+    // Clean up the active request when done
+    activeRequests.delete(dataHash);
+  }
+}
+
+async function performAnalysis(excelData: any[], _dataHash: string): Promise<AnalysisResponse> {
   // Test API connection first
   console.log('[OpenAI] Testing API connection...');
   const isConnected = await testOpenAIConnection();
@@ -479,6 +502,9 @@ function convertEuropeanDecimals(value: string): string {
 // Cache analysis results to avoid re-processing
 const analysisCache = new Map<string, AnalysisResponse>();
 
+// Prevent duplicate API calls for the same file
+const activeRequests = new Map<string, Promise<AnalysisResponse>>();
+
 export async function getCachedAnalysis(fileHash: string): Promise<AnalysisResponse | null> {
   return analysisCache.get(fileHash) || null;
 }
@@ -489,7 +515,9 @@ export function cacheAnalysis(fileHash: string, analysis: AnalysisResponse): voi
   // Clean up old cache entries if too many
   if (analysisCache.size > 10) {
     const firstKey = analysisCache.keys().next().value;
-    analysisCache.delete(firstKey);
+    if (firstKey) {
+      analysisCache.delete(firstKey);
+    }
   }
 }
 
@@ -716,6 +744,15 @@ function convertToMarkdownTable(rawData: any[]): string {
 export async function hashFile(file: File): Promise<string> {
   const buffer = await file.arrayBuffer();
   const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// Generate hash for data to prevent duplicate API calls
+async function generateDataHash(data: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const dataBuffer = encoder.encode(data);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', dataBuffer);
   const hashArray = Array.from(new Uint8Array(hashBuffer));
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
