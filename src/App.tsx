@@ -10,6 +10,7 @@ import ChatToggleButton from './components/chat/ChatToggleButton';
 const Profile = lazy(() => import('./components/Profile'));
 const ChatInterface = lazy(() => import('./components/chat/ChatInterface'));
 import { conversationDataManager, generateFileId, generateMessageId } from './services/conversationData';
+import { sendChatMessage } from './services/chatService';
 import type { SpendAnalysis, SummaryMetrics } from './types';
 import type { ChatContext, ChatMessage } from './services/conversationData';
 
@@ -86,17 +87,11 @@ function App() {
     console.log('[App] Sending chat message:', message);
     
     try {
-      const response = await fetch('http://localhost:3001/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message,
-          chatContext,
-          conversationHistory: chatContext.currentFile?.conversationHistory || []
-        })
-      });
-      
-      const data = await response.json();
+      const data = await sendChatMessage(
+        message,
+        chatContext,
+        chatContext.currentFile?.conversationHistory || []
+      );
       console.log('[App] Chat response:', data);
       
       if (data.success) {
@@ -114,7 +109,7 @@ function App() {
         const aiMessage: ChatMessage = {
           id: generateMessageId(),
           role: 'assistant',
-          content: data.message,
+          content: data.response || 'Sorry, I encountered an issue processing your request.',
           timestamp: new Date(),
           context: {
             fileId: chatContext.currentFile?.fileId
