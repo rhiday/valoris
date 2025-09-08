@@ -2,18 +2,17 @@ import { useState, useCallback } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Upload, X, CheckCircle, AlertCircle, ArrowRight } from 'lucide-react';
-import { parseExcelFile, parseCsvFile, hashFile, getCachedAnalysis } from '../services/openai';
-import { processWithExternalAPIs, processWithNormalAPIs } from '../services/externalApiDemo';
+import { parseExcelFile, parseCsvFile, hashFile, getCachedAnalysis } from '../services/fileParser';
+import { processWithNormalAPIs } from '../services/externalApiDemo';
 import type { SpendAnalysis, SummaryMetrics } from '../types';
 
 interface FileUploadProps {
   onFilesUploaded: (files: File[]) => void;
   uploadedFiles: File[];
   onAnalysisComplete?: (analysis: SpendAnalysis[], summary: SummaryMetrics) => void;
-  useEnhancedAnalysis?: boolean;
 }
 
-const FileUpload = ({ onFilesUploaded, uploadedFiles, onAnalysisComplete, useEnhancedAnalysis = false }: FileUploadProps) => {
+const FileUpload = ({ onFilesUploaded, uploadedFiles, onAnalysisComplete }: FileUploadProps) => {
   const [processingFiles, setProcessingFiles] = useState<string[]>([]);
   const [analysisStatus, setAnalysisStatus] = useState<Record<string, 'processing' | 'completed' | 'error'>>({});
   const [errorMessages, setErrorMessages] = useState<Record<string, string>>({});
@@ -31,7 +30,7 @@ const FileUpload = ({ onFilesUploaded, uploadedFiles, onAnalysisComplete, useEnh
       if (cachedAnalysis) {
         console.log('[FileUpload] Using cached analysis:', cachedAnalysis);
         setAnalysisStatus(prev => ({ ...prev, [file.name]: 'completed' }));
-        setLastAnalysisData(cachedAnalysis);
+        setLastAnalysisData(cachedAnalysis as { analysis: SpendAnalysis[], summary: SummaryMetrics });
         // Don't auto-navigate, let user click Continue
         // if (onAnalysisComplete) {
         //   onAnalysisComplete(cachedAnalysis.analysis, cachedAnalysis.summary);
@@ -89,14 +88,8 @@ const FileUpload = ({ onFilesUploaded, uploadedFiles, onAnalysisComplete, useEnh
     console.log('[FileUpload] Processing all accumulated data:', accumulatedData.length, 'records');
     
     try {
-      let analysis;
-      if (useEnhancedAnalysis) {
-        console.log('[FileUpload] Using Enhanced Analysis with external APIs...');
-        analysis = await processWithExternalAPIs(accumulatedData);
-      } else {
-        console.log('[FileUpload] Using Standard Analysis with external APIs...');
-        analysis = await processWithNormalAPIs(accumulatedData);
-      }
+      console.log('[FileUpload] Using Standard Analysis with n8n APIs...');
+      const analysis = await processWithNormalAPIs(accumulatedData);
       
       console.log('[FileUpload] Combined analysis complete:', analysis);
       setLastAnalysisData(analysis);
@@ -233,9 +226,7 @@ const FileUpload = ({ onFilesUploaded, uploadedFiles, onAnalysisComplete, useEnh
                   {processingFiles.includes(file.name) ? (
                     <div className="flex items-center space-x-2 text-yellow-400">
                       <div className="w-4 h-4 border-2 border-yellow-400 border-t-transparent rounded-full animate-spin" />
-                      <span className="text-sm">
-                        {useEnhancedAnalysis ? 'Enhanced analysis...' : 'Analyzing...'}
-                      </span>
+                      <span className="text-sm">Analyzing...</span>
                     </div>
                   ) : analysisStatus[file.name] === 'error' ? (
                     <div className="flex items-center space-x-2 text-red-400">
@@ -245,9 +236,7 @@ const FileUpload = ({ onFilesUploaded, uploadedFiles, onAnalysisComplete, useEnh
                   ) : analysisStatus[file.name] === 'completed' ? (
                     <div className="flex items-center space-x-2 text-green-400">
                       <CheckCircle className="w-4 h-4" />
-                      <span className="text-sm">
-                        {useEnhancedAnalysis ? '✨ Enhanced' : 'Analyzed'}
-                      </span>
+                      <span className="text-sm">Analyzed</span>
                     </div>
                   ) : (
                     <div className="flex items-center space-x-2 text-green-400">

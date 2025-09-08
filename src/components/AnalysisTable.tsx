@@ -76,11 +76,6 @@ const AnalysisTable = ({ data }: AnalysisTableProps) => {
                       <div>
                         <div className="flex items-center space-x-2">
                           <span className="text-white font-semibold">{item.vendor}</span>
-                          {item.item.includes('Enhanced') && (
-                            <span className="bg-purple-500/20 text-purple-300 text-xs px-2 py-0.5 rounded-full">
-                              ✨ Enhanced
-                            </span>
-                          )}
                         </div>
                         <div className="text-gray-400 text-sm">{item.segment}</div>
                       </div>
