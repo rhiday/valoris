@@ -10,14 +10,14 @@ interface AnalysisResponse {
 // STAGE 1: Data Extraction Prompt (extract exact values from Excel)
 const NORMALIZATION_PROMPT = `You are a procurement data analyst. Extract the EXACT values from this Excel data without any calculations or modifications.
 
-Task: Extract actual values from the Excel data and normalize into structured format.
+Task: Extract actual values from the Excel data and normalize into structured format. IMPORTANT: Process ALL vendors/suppliers found in the data - do not skip any!
 
 Return a JSON object with this EXACT structure:
 
 {
   "normalizedData": [
     {
-      "id": "HW-001-1",
+      "id": "vendor-1",
       "vendorName": "Fastenal Company",
       "category": "Fasteners", 
       "subCategory": "Hardware Components",
@@ -32,35 +32,33 @@ Return a JSON object with this EXACT structure:
 }
 
 CRITICAL RULES:
-1. Extract EXACT values - do not calculate, estimate, or modify any numbers
-2. Use Supplier field for vendorName
-3. Use Total_Current_Cost for annualSpend (exact value)
-4. Use Potential_Savings for potentialSavings (including negative values)
-5. Use Savings_Percentage for savingsPercentage (keep original format)
-6. Use Department for department
-7. Use Category for category
-8. Use Item_ID for id
-9. Create subCategory from Product_Name or Category
-10. PRESERVE negative savings values - do not convert to positive
-11. Keep all decimal places in numbers
-12. Sum up values by Supplier if multiple rows exist for same supplier
+1. PROCESS EVERY VENDOR - create one entry for EACH unique vendor/supplier in the data
+2. If using preprocessed/grouped data, use the vendor, spend, potentialSavings fields directly
+3. If using raw Excel data: Use Supplier for vendorName, Total_Current_Cost for annualSpend
+4. Keep EXACT decimal values (e.g., 11571.68, not 11572)
+5. PRESERVE negative savings values - do not convert to positive
+6. Include ALL vendors even if they have negative savings or small amounts
+7. The normalizedData array must contain ALL vendors from the input
+8. Use sequential IDs: vendor-1, vendor-2, vendor-3, etc.
 
 Return ONLY the JSON object, no markdown, no explanation.`;
 
 // STAGE 2: Data Presentation Prompt (using actual Excel values including savings)
-const OPTIMIZATION_PROMPT = `You are a procurement data analyst. Convert normalized vendor data into dashboard format using the ACTUAL values from Excel, including real potential savings.
+const OPTIMIZATION_PROMPT = `You are a procurement data analyst. Convert ALL normalized vendor data into dashboard format using ACTUAL values from Excel.
+
+IMPORTANT: You MUST process EVERY vendor from the normalizedData array - do not skip any vendors!
 
 Based on the normalized vendor data provided, return a JSON object with this EXACT structure:
 
 {
   "analysis": [
     {
-      "id": "HW-001-1",
+      "id": "vendor-1",
       "vendor": "Fastenal Company",
       "segment": "Engineering",
       "category": "Fasteners",
       "type": "Hardware Components", 
-      "item": "Hex Head Cap Screw M8x25mm, 22513 pieces",
+      "item": "Hex Head Cap Screw M8x25mm",
       "pastSpend": 11571.68,
       "projectedSpend": 10491.06,
       "projectedChange": "-9.3%",
@@ -88,18 +86,15 @@ Based on the normalized vendor data provided, return a JSON object with this EXA
 }
 
 CRITICAL RULES:
-1. Use annualSpend from normalized data for pastSpend (exact value)
-2. Calculate projectedSpend = pastSpend - potentialSavings (if positive savings) OR pastSpend + abs(potentialSavings) (if negative)
-3. Use actual savingsPercentage from normalized data for both projectedChange and savingsPercentage
-4. Use potentialSavings for savingsRange (format as €X,XXX.XX - keep negative signs!)
-5. Use vendorName for vendor
-6. Use department for segment
-7. Use category and subCategory for type
-8. Use additionalInfo for item
-9. For negative savings: projectedSpend = pastSpend + abs(potentialSavings), show negative percentages
-10. Summary: sum all pastSpend, all projectedSpend, all potentialSavings
-11. Preserve all decimal places and negative values exactly as in Excel
-12. Group by vendor name and sum values if multiple entries
+1. CREATE ONE ENTRY in the analysis array for EACH vendor in normalizedData
+2. The analysis array length MUST equal the normalizedData array length
+3. Use exact values: annualSpend → pastSpend, potentialSavings → savingsRange
+4. Calculate projectedSpend = pastSpend - potentialSavings (keep negatives)
+5. Format savingsRange as currency: €X,XXX.XX (include negative sign if negative)
+6. For negative savings: show as negative in savingsRange and projectedChange
+7. Summary MUST include totals of ALL vendors (sum all pastSpend, projectedSpend, potentialSavings)
+8. Do NOT skip vendors with small amounts or negative savings
+9. Preserve exact decimal values (11571.68, not 11572)
 
 Return ONLY the JSON object, no markdown, no explanation.`;
 
