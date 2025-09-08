@@ -551,7 +551,7 @@ function preprocessExcelData(rawData: any[]): any[] {
     supplierGroups[supplier].push(row);
   });
 
-  return Object.entries(supplierGroups).map(([supplier, rows], index) => {
+  return Object.entries(supplierGroups).map(([supplier, rows]) => {
     // Sum up costs and savings for same supplier
     const totalCurrentCost = rows.reduce((sum, row) => sum + (row.Total_Current_Cost || 0), 0);
     const totalMarketCost = rows.reduce((sum, row) => sum + (row.Total_Market_Cost || 0), 0);
@@ -582,63 +582,6 @@ function preprocessExcelData(rawData: any[]): any[] {
   }).filter(row => row.vendor && row.spend > 0); // Only keep rows with vendor and spend data
 }
 
-// Extract field value from various possible column names
-function extractField(row: any, possibleNames: string[]): string {
-  for (const name of possibleNames) {
-    // Try exact match first
-    if (row[name] !== undefined && row[name] !== null) {
-      return String(row[name]).trim();
-    }
-    
-    // Try case-insensitive match
-    const keys = Object.keys(row);
-    const matchingKey = keys.find(key => 
-      key.toLowerCase().includes(name.toLowerCase()) ||
-      name.toLowerCase().includes(key.toLowerCase())
-    );
-    
-    if (matchingKey && row[matchingKey] !== undefined && row[matchingKey] !== null) {
-      return String(row[matchingKey]).trim();
-    }
-  }
-  return '';
-}
-
-// Parse spend amount from various formats including European decimal notation
-function parseSpendAmount(spendText: string): number {
-  if (!spendText) return 0;
-  
-  const text = String(spendText).trim();
-  console.log('[parseSpendAmount] Input:', text);
-  
-  // Handle European number format first (comma as decimal separator)
-  // Pattern examples: "11.571,68", "0,514", "1.234,56"
-  const europeanPattern = /^[\d.]*,\d{2,3}$/;
-  
-  if (europeanPattern.test(text.replace(/[€$£¥₹\s]/g, ''))) {
-    console.log('[parseSpendAmount] Detected European format');
-    // Remove currency symbols and spaces, then convert comma to dot
-    let cleaned = text
-      .replace(/[€$£¥₹\s]/g, '') // Remove currency symbols and spaces
-      .replace(/\./g, '') // Remove thousands separators (dots in European format)
-      .replace(',', '.'); // Convert decimal comma to dot
-    
-    const parsed = parseFloat(cleaned);
-    console.log('[parseSpendAmount] European parsed:', parsed);
-    return isNaN(parsed) ? 0 : Math.abs(parsed);
-  }
-  
-  // Handle US number format (dot as decimal separator)
-  // Remove currency symbols and commas (thousands separators)
-  const cleaned = text
-    .replace(/[€$£¥₹\s]/g, '') // Remove currency symbols and spaces
-    .replace(/,/g, '') // Remove thousands separators (commas in US format)
-    .replace(/[^\d.-]/g, ''); // Keep only digits, dots, and dashes
-  
-  const parsed = parseFloat(cleaned);
-  console.log('[parseSpendAmount] US format parsed:', parsed);
-  return isNaN(parsed) ? 0 : Math.abs(parsed); // Return absolute value
-}
 
 // Normalize category to standard values
 function normalizeCategory(category: string): string {
