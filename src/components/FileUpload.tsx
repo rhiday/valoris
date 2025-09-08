@@ -2,16 +2,18 @@ import { useState, useCallback } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Upload, X, CheckCircle, AlertCircle, ArrowRight } from 'lucide-react';
-import { parseExcelFile, parseCsvFile, analyzeExcelData, hashFile, getCachedAnalysis, cacheAnalysis } from '../services/openai';
+import { parseExcelFile, parseCsvFile, analyzeExcelData, hashFile, getCachedAnalysis, cacheAnalysis, testOpenAIConnection } from '../services/openai';
+import { processWithExternalAPIs } from '../services/externalApiDemo';
 import type { SpendAnalysis, SummaryMetrics } from '../types';
 
 interface FileUploadProps {
   onFilesUploaded: (files: File[]) => void;
   uploadedFiles: File[];
   onAnalysisComplete?: (analysis: SpendAnalysis[], summary: SummaryMetrics) => void;
+  useEnhancedAnalysis?: boolean;
 }
 
-const FileUpload = ({ onFilesUploaded, uploadedFiles, onAnalysisComplete }: FileUploadProps) => {
+const FileUpload = ({ onFilesUploaded, uploadedFiles, onAnalysisComplete, useEnhancedAnalysis = false }: FileUploadProps) => {
   const [processingFiles, setProcessingFiles] = useState<string[]>([]);
   const [analysisStatus, setAnalysisStatus] = useState<Record<string, 'processing' | 'completed' | 'error'>>({});
   const [errorMessages, setErrorMessages] = useState<Record<string, string>>({});
@@ -56,22 +58,39 @@ const FileUpload = ({ onFilesUploaded, uploadedFiles, onAnalysisComplete }: File
       
       console.log('[FileUpload] Data parsed:', parsedData.slice(0, 3));
       
-      // Check if we have API key
-      if (!import.meta.env.VITE_OPENAI_API_KEY) {
-        console.warn('[FileUpload] No OpenAI API key found. Please set VITE_OPENAI_API_KEY in .env file');
-        console.log('[FileUpload] Parsed data structure:', {
-          totalRows: parsedData.length,
-          columns: Object.keys(parsedData[0] || {}),
-          sampleData: parsedData.slice(0, 3)
-        });
-        setAnalysisStatus(prev => ({ ...prev, [file.name]: 'error' }));
-        setErrorMessages(prev => ({ ...prev, [file.name]: 'OpenAI API key not configured. Check console for parsed data.' }));
-        return;
+      // Choose analysis method based on toggle
+      let analysis;
+      if (useEnhancedAnalysis) {
+        console.log('[FileUpload] Using Enhanced Analysis with external APIs...');
+        analysis = await processWithExternalAPIs(parsedData);
+      } else {
+        // Check if we have OpenAI API key
+        if (!import.meta.env.VITE_OPENAI_API_KEY) {
+          console.warn('[FileUpload] No OpenAI API key found. Please set VITE_OPENAI_API_KEY in .env file');
+          console.log('[FileUpload] Parsed data structure:', {
+            totalRows: parsedData.length,
+            columns: Object.keys(parsedData[0] || {}),
+            sampleData: parsedData.slice(0, 3)
+          });
+          setAnalysisStatus(prev => ({ ...prev, [file.name]: 'error' }));
+          setErrorMessages(prev => ({ ...prev, [file.name]: 'OpenAI API key not configured. Check console for parsed data.' }));
+          return;
+        }
+        
+        // Test OpenAI connectivity first
+        console.log('[FileUpload] Using Standard Analysis with OpenAI...');
+        const isConnected = await testOpenAIConnection();
+        if (!isConnected) {
+          console.error('[FileUpload] OpenAI API connection failed - check API key and network');
+          setAnalysisStatus(prev => ({ ...prev, [file.name]: 'error' }));
+          setErrorMessages(prev => ({ ...prev, [file.name]: 'OpenAI API connection failed. Check API key and network.' }));
+          return;
+        }
+        
+        // Analyze with OpenAI
+        analysis = await analyzeExcelData(parsedData);
       }
       
-      // Analyze with OpenAI
-      console.log('[FileUpload] Sending to OpenAI for analysis...');
-      const analysis = await analyzeExcelData(parsedData);
       console.log('[FileUpload] Analysis complete:', analysis);
       
       // Cache the result
@@ -218,7 +237,9 @@ const FileUpload = ({ onFilesUploaded, uploadedFiles, onAnalysisComplete }: File
                   {processingFiles.includes(file.name) ? (
                     <div className="flex items-center space-x-2 text-yellow-400">
                       <div className="w-4 h-4 border-2 border-yellow-400 border-t-transparent rounded-full animate-spin" />
-                      <span className="text-sm">Analyzing...</span>
+                      <span className="text-sm">
+                        {useEnhancedAnalysis ? 'Enhanced analysis...' : 'Analyzing...'}
+                      </span>
                     </div>
                   ) : analysisStatus[file.name] === 'error' ? (
                     <div className="flex items-center space-x-2 text-red-400">
@@ -228,7 +249,9 @@ const FileUpload = ({ onFilesUploaded, uploadedFiles, onAnalysisComplete }: File
                   ) : analysisStatus[file.name] === 'completed' ? (
                     <div className="flex items-center space-x-2 text-green-400">
                       <CheckCircle className="w-4 h-4" />
-                      <span className="text-sm">Analyzed</span>
+                      <span className="text-sm">
+                        {useEnhancedAnalysis ? '✨ Enhanced' : 'Analyzed'}
+                      </span>
                     </div>
                   ) : (
                     <div className="flex items-center space-x-2 text-green-400">
