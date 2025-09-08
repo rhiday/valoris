@@ -7,100 +7,106 @@ interface AnalysisResponse {
   summary: SummaryMetrics;
 }
 
-// STAGE 1: Data Normalization Prompt
-const NORMALIZATION_PROMPT = `You are a procurement data analyst. Normalize the provided Excel data into a structured format.
+// STAGE 1: Data Extraction Prompt (extract exact values from Excel)
+const NORMALIZATION_PROMPT = `You are a procurement data analyst. Extract the EXACT values from this Excel data without any calculations or modifications.
 
-Task: Analyze uploaded procurement data and normalize into structured format.
+Task: Extract actual values from the Excel data and normalize into structured format.
 
 Return a JSON object with this EXACT structure:
 
 {
   "normalizedData": [
     {
-      "id": "vendor-1",
-      "vendorName": "Microsoft Corporation",
-      "category": "Software", 
-      "subCategory": "Office Suite",
-      "annualSpend": 450000,
-      "contractDetails": "3-year enterprise agreement, expires Dec 2024",
-      "department": "IT",
-      "additionalInfo": "300 licenses, Office 365 E3 plan"
+      "id": "HW-001-1",
+      "vendorName": "Fastenal Company",
+      "category": "Fasteners", 
+      "subCategory": "Hardware Components",
+      "annualSpend": 11571.68,
+      "potentialSavings": 1080.62,
+      "savingsPercentage": "9.3%",
+      "contractDetails": "Current procurement order",
+      "department": "Engineering",
+      "additionalInfo": "Hex Head Cap Screw M8x25mm, 22513 pieces"
     }
   ]
 }
 
-RULES:
-1. Create one entry for EACH vendor in the data
-2. Category: Software, Cloud, Services, Hardware, or Other
-3. Sub-category: specific type (Office suite, CRM, Consulting, etc.)
-4. Annual Spend: total yearly cost in EUR (numbers only)
-5. Department: IT, Sales, Marketing, HR, Operations, or Finance
-6. Contract Details: terms, renewal dates, usage metrics if available
-7. Additional Info: concatenate other relevant fields
-8. Use existing IDs or generate "vendor-###"
+CRITICAL RULES:
+1. Extract EXACT values - do not calculate, estimate, or modify any numbers
+2. Use Supplier field for vendorName
+3. Use Total_Current_Cost for annualSpend (exact value)
+4. Use Potential_Savings for potentialSavings (including negative values)
+5. Use Savings_Percentage for savingsPercentage (keep original format)
+6. Use Department for department
+7. Use Category for category
+8. Use Item_ID for id
+9. Create subCategory from Product_Name or Category
+10. PRESERVE negative savings values - do not convert to positive
+11. Keep all decimal places in numbers
+12. Sum up values by Supplier if multiple rows exist for same supplier
 
 Return ONLY the JSON object, no markdown, no explanation.`;
 
-// STAGE 2: Optimization Analysis Prompt  
-const OPTIMIZATION_PROMPT = `You are a procurement optimization expert. Analyze normalized vendor data and provide optimization recommendations.
+// STAGE 2: Data Presentation Prompt (using actual Excel values including savings)
+const OPTIMIZATION_PROMPT = `You are a procurement data analyst. Convert normalized vendor data into dashboard format using the ACTUAL values from Excel, including real potential savings.
 
 Based on the normalized vendor data provided, return a JSON object with this EXACT structure:
 
 {
   "analysis": [
     {
-      "id": "vendor-1",
-      "vendor": "Microsoft Corporation",
-      "segment": "IT",
-      "category": "Software",
-      "type": "Office Suite", 
-      "item": "MS 365 E3",
-      "pastSpend": 450000,
-      "projectedSpend": 495000,
-      "projectedChange": "+10%",
-      "savingsRange": "€22,500 to €49,500",
-      "savingsPercentage": "-5 to -10%",
-      "confidence": 0.92,
-      "alternatives": [
-        {
-          "vendor": "Google Workspace",
-          "estimatedPrice": "€380,000",
-          "feasibility": "High - similar features, 30-day migration"
-        }
-      ],
+      "id": "HW-001-1",
+      "vendor": "Fastenal Company",
+      "segment": "Engineering",
+      "category": "Fasteners",
+      "type": "Hardware Components", 
+      "item": "Hex Head Cap Screw M8x25mm, 22513 pieces",
+      "pastSpend": 11571.68,
+      "projectedSpend": 10491.06,
+      "projectedChange": "-9.3%",
+      "savingsRange": "€1,080.62",
+      "savingsPercentage": "9.3%",
+      "confidence": 1.0,
+      "alternatives": [],
       "details": {
-        "description": "Optimize licenses based on actual usage patterns",
-        "implementation": "Audit user activity, remove unused licenses, negotiate volume discount",
-        "timeline": "30-45 days",
+        "description": "Actual procurement data showing current vs market pricing",
+        "implementation": "Market analysis shows potential cost optimization",
+        "timeline": "Immediate opportunity",
         "riskLevel": "Low"
       }
     }
   ],
   "summary": {
-    "pastSpend": 450000,
-    "projectedSpend": 495000,
+    "pastSpend": 11571.68,
+    "projectedSpend": 10491.06,
     "potentialSavings": {
-      "min": 24750,
-      "max": 74250
+      "min": 1080.62,
+      "max": 1080.62
     },
-    "roi": 67
+    "roi": 9
   }
 }
 
-RULES:
-1. Use the normalized data as input for optimization analysis
-2. Provide 1-2 alternatives per vendor with realistic pricing
-3. Calculate projected spend as past spend * 1.08 to 1.15 (8-15% growth)
-4. Include feasibility assessment for each alternative
-5. Confidence: 0.5 to 1.0 based on optimization potential
-6. All numbers must be actual numbers, not strings
-7. Summary must aggregate ALL vendors
+CRITICAL RULES:
+1. Use annualSpend from normalized data for pastSpend (exact value)
+2. Calculate projectedSpend = pastSpend - potentialSavings (if positive savings) OR pastSpend + abs(potentialSavings) (if negative)
+3. Use actual savingsPercentage from normalized data for both projectedChange and savingsPercentage
+4. Use potentialSavings for savingsRange (format as €X,XXX.XX - keep negative signs!)
+5. Use vendorName for vendor
+6. Use department for segment
+7. Use category and subCategory for type
+8. Use additionalInfo for item
+9. For negative savings: projectedSpend = pastSpend + abs(potentialSavings), show negative percentages
+10. Summary: sum all pastSpend, all projectedSpend, all potentialSavings
+11. Preserve all decimal places and negative values exactly as in Excel
+12. Group by vendor name and sum values if multiple entries
 
 Return ONLY the JSON object, no markdown, no explanation.`;
 
 // Test OpenAI API connectivity
 async function testOpenAIConnection(): Promise<boolean> {
   try {
+    console.log('[OpenAI] Testing API connectivity...');
     const response = await fetch('https://api.openai.com/v1/models', {
       headers: {
         'Authorization': `Bearer ${OPENAI_API_KEY}`,
@@ -108,10 +114,11 @@ async function testOpenAIConnection(): Promise<boolean> {
     });
     
     if (response.ok) {
-      console.log('[OpenAI] API connection test: ✅ Success');
+      console.log('[OpenAI] API connection test: ✅ Success - OpenAI API is working!');
       return true;
     } else {
-      console.error('[OpenAI] API connection test: ❌ Failed -', response.status);
+      const errorText = await response.text();
+      console.error('[OpenAI] API connection test: ❌ Failed -', response.status, errorText);
       return false;
     }
   } catch (error) {
@@ -119,6 +126,9 @@ async function testOpenAIConnection(): Promise<boolean> {
     return false;
   }
 }
+
+// Export test function for debugging
+export { testOpenAIConnection };
 
 export async function analyzeExcelData(excelData: any[]): Promise<AnalysisResponse> {
   if (!OPENAI_API_KEY) {
@@ -530,57 +540,43 @@ function preprocessExcelData(rawData: any[]): any[] {
 
   console.log('[OpenAI] Preprocessing Excel data, sample row:', rawData[0]);
   
-  return rawData.map((row, index) => {
-    // Extract vendor name from various possible field names
-    const vendor = extractField(row, [
-      'vendor name', 'vendor', 'supplier', 'company name', 'company', 
-      'contractor', 'provider', 'service provider', 'organization'
-    ]);
+  // Group by supplier to sum up values for same vendors
+  const supplierGroups: { [key: string]: any[] } = {};
+  
+  rawData.forEach(row => {
+    const supplier = row.Supplier || row.supplier || `Unknown Supplier`;
+    if (!supplierGroups[supplier]) {
+      supplierGroups[supplier] = [];
+    }
+    supplierGroups[supplier].push(row);
+  });
 
-    // Extract spend amount from various possible field names
-    const spendText = extractField(row, [
-      'annual spend (eur)', 'annual spend', 'spend', 'amount', 'cost', 
-      'total cost', 'yearly cost', 'budget', 'expense', 'value',
-      'contract value', 'total amount', 'price'
-    ]);
+  return Object.entries(supplierGroups).map(([supplier, rows], index) => {
+    // Sum up costs and savings for same supplier
+    const totalCurrentCost = rows.reduce((sum, row) => sum + (row.Total_Current_Cost || 0), 0);
+    const totalMarketCost = rows.reduce((sum, row) => sum + (row.Total_Market_Cost || 0), 0);
+    const totalPotentialSavings = rows.reduce((sum, row) => sum + (row.Potential_Savings || 0), 0);
+    
+    // Calculate average percentage (weighted by cost)
+    const avgSavingsPercentage = totalCurrentCost > 0 ? 
+      ((totalPotentialSavings / totalCurrentCost) * 100).toFixed(1) + '%' : '0%';
 
-    // Clean and parse spend amount
-    const spend = parseSpendAmount(spendText);
-
-    // Extract category/type
-    const category = extractField(row, [
-      'category', 'type', 'service type', 'product type', 
-      'classification', 'service category'
-    ]);
-
-    // Extract segment/department
-    const segment = extractField(row, [
-      'segment', 'department', 'division', 'business unit',
-      'area', 'function', 'team', 'group'
-    ]);
-
-    // Extract contract information
-    const contractEnd = extractField(row, [
-      'contract end date', 'contract end', 'expiry date', 'end date',
-      'renewal date', 'expiration', 'contract expiry'
-    ]);
-
-    // Extract usage metrics
-    const usage = extractField(row, [
-      'licenses', 'users', 'seats', 'usage', 'volume',
-      'quantity', 'count', 'instances'
-    ]);
-
-    // Create standardized row
+    // Get representative data from first row of the group
+    const firstRow = rows[0];
+    
     const cleanedRow = {
-      vendor: vendor || `Unknown Vendor ${index + 1}`,
-      spend: spend || 0,
-      category: normalizeCategory(category),
-      segment: normalizeSegment(segment),
-      contractEnd: contractEnd || '',
-      usage: usage || '',
-      originalData: row // Keep original for reference
+      vendor: supplier,
+      spend: Math.round(totalCurrentCost * 100) / 100, // Round to 2 decimal places
+      potentialSavings: Math.round(totalPotentialSavings * 100) / 100,
+      savingsPercentage: avgSavingsPercentage,
+      projectedSpend: Math.round(totalMarketCost * 100) / 100,
+      category: normalizeCategory(firstRow.Category || 'Other'),
+      segment: normalizeSegment(firstRow.Department || 'Operations'),
+      productInfo: rows.map(r => r.Product_Name).filter((v, i, a) => a.indexOf(v) === i).join(', '), // Unique products
+      originalData: rows // Keep all original rows for reference
     };
+
+    console.log(`[Preprocessing] ${supplier}: €${cleanedRow.spend} → €${cleanedRow.projectedSpend}, savings: €${cleanedRow.potentialSavings} (${cleanedRow.savingsPercentage})`);
 
     return cleanedRow;
   }).filter(row => row.vendor && row.spend > 0); // Only keep rows with vendor and spend data
