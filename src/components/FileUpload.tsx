@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Upload, X, CheckCircle, AlertCircle } from 'lucide-react';
+import { Upload, X, CheckCircle, AlertCircle, ArrowRight } from 'lucide-react';
 import { parseExcelFile, analyzeExcelData, hashFile, getCachedAnalysis, cacheAnalysis } from '../services/openai';
 import type { SpendAnalysis, SummaryMetrics } from '../types';
 
@@ -15,6 +15,7 @@ const FileUpload = ({ onFilesUploaded, uploadedFiles, onAnalysisComplete }: File
   const [processingFiles, setProcessingFiles] = useState<string[]>([]);
   const [analysisStatus, setAnalysisStatus] = useState<Record<string, 'processing' | 'completed' | 'error'>>({});
   const [errorMessages, setErrorMessages] = useState<Record<string, string>>({});
+  const [lastAnalysisData, setLastAnalysisData] = useState<{ analysis: SpendAnalysis[], summary: SummaryMetrics } | null>(null);
 
   const processExcelFile = async (file: File) => {
     console.log(`[FileUpload] Starting to process Excel file: ${file.name}`);
@@ -27,9 +28,11 @@ const FileUpload = ({ onFilesUploaded, uploadedFiles, onAnalysisComplete }: File
       if (cachedAnalysis) {
         console.log('[FileUpload] Using cached analysis:', cachedAnalysis);
         setAnalysisStatus(prev => ({ ...prev, [file.name]: 'completed' }));
-        if (onAnalysisComplete) {
-          onAnalysisComplete(cachedAnalysis.analysis, cachedAnalysis.summary);
-        }
+        setLastAnalysisData(cachedAnalysis);
+        // Don't auto-navigate, let user click Continue
+        // if (onAnalysisComplete) {
+        //   onAnalysisComplete(cachedAnalysis.analysis, cachedAnalysis.summary);
+        // }
         return;
       }
       
@@ -60,11 +63,12 @@ const FileUpload = ({ onFilesUploaded, uploadedFiles, onAnalysisComplete }: File
       cacheAnalysis(fileHash, analysis);
       
       setAnalysisStatus(prev => ({ ...prev, [file.name]: 'completed' }));
+      setLastAnalysisData(analysis);
       
-      // Pass to parent component if handler provided
-      if (onAnalysisComplete) {
-        onAnalysisComplete(analysis.analysis, analysis.summary);
-      }
+      // Don't auto-navigate, let user click Continue
+      // if (onAnalysisComplete) {
+      //   onAnalysisComplete(analysis.analysis, analysis.summary);
+      // }
     } catch (error) {
       console.error('[FileUpload] Error processing file:', error);
       setAnalysisStatus(prev => ({ ...prev, [file.name]: 'error' }));
@@ -91,6 +95,18 @@ const FileUpload = ({ onFilesUploaded, uploadedFiles, onAnalysisComplete }: File
         setTimeout(() => {
           setProcessingFiles(prev => prev.filter(name => name !== file.name));
           setAnalysisStatus(prev => ({ ...prev, [file.name]: 'completed' }));
+          // For non-Excel files, set empty analysis data so button can be enabled
+          if (!lastAnalysisData) {
+            setLastAnalysisData({
+              analysis: [],
+              summary: {
+                totalSpend: 0,
+                potentialSavings: 0,
+                vendorCount: 0,
+                avgSavingsPercentage: 0
+              }
+            });
+          }
         }, 2000);
       }
     }
@@ -212,16 +228,50 @@ const FileUpload = ({ onFilesUploaded, uploadedFiles, onAnalysisComplete }: File
       </AnimatePresence>
 
       {uploadedFiles.length > 0 && (
-        <div className="bg-green-500/10 border border-green-500/20 rounded-lg p-4">
-          <div className="flex items-center space-x-2">
-            <CheckCircle className="w-5 h-5 text-green-400" />
-            <p className="text-green-200">
-              <strong>{uploadedFiles.length} file{uploadedFiles.length !== 1 ? 's' : ''} ready for analysis</strong>
+        <div className="space-y-4">
+          <div className="bg-green-500/10 border border-green-500/20 rounded-lg p-4">
+            <div className="flex items-center space-x-2">
+              <CheckCircle className="w-5 h-5 text-green-400" />
+              <p className="text-green-200">
+                <strong>{uploadedFiles.length} file{uploadedFiles.length !== 1 ? 's' : ''} ready for analysis</strong>
+              </p>
+            </div>
+            <p className="text-green-300/80 text-sm mt-1">
+              Our AI will extract and analyze procurement data from these files to identify cost optimization opportunities.
             </p>
           </div>
-          <p className="text-green-300/80 text-sm mt-1">
-            Our AI will extract and analyze procurement data from these files to identify cost optimization opportunities.
-          </p>
+          
+          {/* Continue button - only enable when processing is complete */}
+          <button
+            onClick={() => {
+              if (onAnalysisComplete && lastAnalysisData) {
+                onAnalysisComplete(lastAnalysisData.analysis, lastAnalysisData.summary);
+              }
+            }}
+            disabled={processingFiles.length > 0 || !lastAnalysisData}
+            className={`w-full font-semibold py-3 px-6 rounded-lg transition-all flex items-center justify-center gap-2 group ${
+              processingFiles.length > 0 || !lastAnalysisData
+                ? 'bg-gray-600 cursor-not-allowed text-gray-300'
+                : 'bg-purple-600 hover:bg-purple-700 text-white'
+            }`}
+          >
+            {processingFiles.length > 0 ? (
+              <>
+                <div className="w-5 h-5 border-2 border-gray-300 border-t-transparent rounded-full animate-spin" />
+                Analyzing Files...
+              </>
+            ) : !lastAnalysisData ? (
+              <>
+                <div className="w-5 h-5 border-2 border-gray-300 border-t-transparent rounded-full animate-spin opacity-50" />
+                Waiting for Analysis...
+              </>
+            ) : (
+              <>
+                Continue to Dashboard
+                <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+              </>
+            )}
+          </button>
         </div>
       )}
     </div>
