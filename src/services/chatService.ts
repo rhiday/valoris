@@ -1,6 +1,6 @@
 import type { ChatContext, ChatMessage } from './conversationData';
 
-// Simple fallback chat service - returns helpful responses without OpenAI
+// Simple keyword-based chat service - provides helpful responses for procurement questions
 export async function sendChatMessage(
   message: string,
   chatContext: ChatContext,
@@ -37,9 +37,9 @@ export async function sendChatMessage(
   } else {
     const fallbacks = [
       "I'm here to help with procurement analysis and optimization. What specific aspect of your vendor spending would you like to explore?",
-      "Great question! While I'm currently operating in simplified mode, I can still provide general procurement guidance. What would you like to know?",
+      "Great question! I can provide procurement guidance and insights. What would you like to know about your vendor analysis?",
       "I'd be happy to help! Can you tell me more about which vendors or categories you're most interested in optimizing?",
-      "That's an interesting question about procurement. While my full analysis capabilities are limited right now, I can offer general insights. What's your main concern?"
+      "That's an interesting question about procurement. I can offer insights based on your analysis. What's your main concern?"
     ];
     response = fallbacks[Math.floor(Math.random() * fallbacks.length)];
   }

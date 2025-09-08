@@ -69,7 +69,9 @@ async function callStep1Api(excelData: ExcelRow[]): Promise<any> {
     'Content-Type': 'application/json',
     'API-KEY': API_KEY.substring(0, 8) + '...'
   });
-  console.log('[N8nAPI] Step 1 Body preview:', markdownTable.substring(0, 200) + '...');
+  console.log('[N8nAPI] Step 1 FULL Markdown Table being sent:');
+  console.log(markdownTable);
+  console.log('[N8nAPI] Step 1 Body JSON:', JSON.stringify({ csv_data: markdownTable }).substring(0, 500));
   
   const response = await fetch(STEP1_API_URL, {
     method: 'POST',
@@ -88,8 +90,18 @@ async function callStep1Api(excelData: ExcelRow[]): Promise<any> {
     throw handleApiError(response, errorText, 'Step 1 API');
   }
 
-  const result = await response.json();
-  return result;
+  // First get the response as text to see what we're getting
+  const responseText = await response.text();
+  console.log('[N8nAPI] Step 1 Raw Response:', responseText.substring(0, 500));
+  
+  // Try to parse as JSON
+  try {
+    const result = JSON.parse(responseText);
+    return result;
+  } catch (error) {
+    console.error('[N8nAPI] Step 1 Response is not valid JSON:', responseText);
+    throw new Error(`Step 1 returned invalid JSON: ${responseText.substring(0, 200)}`);
+  }
 }
 
 /**
@@ -118,8 +130,18 @@ async function callStep2Api(normalizedData: any): Promise<any> {
     throw handleApiError(response, errorText, 'Step 2 API');
   }
 
-  const result = await response.json();
-  return result;
+  // First get the response as text to see what we're getting
+  const responseText = await response.text();
+  console.log('[N8nAPI] Step 2 Raw Response:', responseText.substring(0, 500));
+  
+  // Try to parse as JSON
+  try {
+    const result = JSON.parse(responseText);
+    return result;
+  } catch (error) {
+    console.error('[N8nAPI] Step 2 Response is not valid JSON:', responseText);
+    throw new Error(`Step 2 returned invalid JSON: ${responseText.substring(0, 200)}`);
+  }
 }
 
 /**
@@ -268,10 +290,14 @@ export async function processWithNormalAPIs(excelData: ExcelRow[]): Promise<Exte
   try {
     // Step 1: Data Normalization
     const step1Result = await callStep1Api(excelData);
-    console.log('📊 Step 1 Result:', JSON.stringify(step1Result, null, 2).slice(0, 500));
+    console.log('📊 Step 1 COMPLETE Result:', JSON.stringify(step1Result));
+    console.log('📊 Step 1 normalizedData content:', step1Result.normalizedData);
+    
+    // Log what we're sending to Step 2
+    console.log('📊 Sending to Step 2:', JSON.stringify(step1Result));
     
     const step2Result = await callStep2Api(step1Result);
-    console.log('📊 Step 2 Result:', JSON.stringify(step2Result, null, 2).slice(0, 500));
+    console.log('📊 Step 2 COMPLETE Result:', JSON.stringify(step2Result));
     console.log('📊 Step 2 Result type:', typeof step2Result);
     console.log('📊 Step 2 has analysis?:', step2Result?.analysis ? 'YES' : 'NO');
     
