@@ -129,8 +129,6 @@ const AnalysisTable = ({ data }: AnalysisTableProps) => {
                   />
                 </td>
               </motion.tr>
-              
-              
               <AnimatePresence>
                 {expandedRow === item.id && (
                   <motion.tr

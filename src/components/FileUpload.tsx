@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Upload, X, CheckCircle, AlertCircle, ArrowRight } from 'lucide-react';
-import { parseExcelFile, analyzeExcelData, hashFile, getCachedAnalysis, cacheAnalysis } from '../services/openai';
+import { parseExcelFile, parseCsvFile, analyzeExcelData, hashFile, getCachedAnalysis, cacheAnalysis } from '../services/openai';
 import type { SpendAnalysis, SummaryMetrics } from '../types';
 
 interface FileUploadProps {
@@ -17,8 +17,8 @@ const FileUpload = ({ onFilesUploaded, uploadedFiles, onAnalysisComplete }: File
   const [errorMessages, setErrorMessages] = useState<Record<string, string>>({});
   const [lastAnalysisData, setLastAnalysisData] = useState<{ analysis: SpendAnalysis[], summary: SummaryMetrics } | null>(null);
 
-  const processExcelFile = async (file: File) => {
-    console.log(`[FileUpload] Starting to process Excel file: ${file.name}`);
+  const processDataFile = async (file: File) => {
+    console.log(`[FileUpload] Starting to process data file: ${file.name}, type: ${file.type}`);
     
     try {
       // Check cache first
@@ -36,18 +36,33 @@ const FileUpload = ({ onFilesUploaded, uploadedFiles, onAnalysisComplete }: File
         return;
       }
       
-      // Parse Excel file
-      console.log('[FileUpload] Parsing Excel file...');
-      const excelData = await parseExcelFile(file);
-      console.log('[FileUpload] Excel data parsed:', excelData);
+      // Parse file based on type
+      console.log('[FileUpload] Parsing file...');
+      let parsedData;
+      
+      if (file.type.includes('csv') || file.name.toLowerCase().endsWith('.csv')) {
+        console.log('[FileUpload] Processing as CSV file');
+        parsedData = await parseCsvFile(file);
+      } else if (
+        file.type.includes('excel') || 
+        file.type.includes('spreadsheet') ||
+        file.name.toLowerCase().match(/\.(xls|xlsx|xlsm|xlsb)$/)
+      ) {
+        console.log('[FileUpload] Processing as Excel file');
+        parsedData = await parseExcelFile(file);
+      } else {
+        throw new Error(`Unsupported file type: ${file.type}`);
+      }
+      
+      console.log('[FileUpload] Data parsed:', parsedData.slice(0, 3));
       
       // Check if we have API key
       if (!import.meta.env.VITE_OPENAI_API_KEY) {
         console.warn('[FileUpload] No OpenAI API key found. Please set VITE_OPENAI_API_KEY in .env file');
-        console.log('[FileUpload] Excel data structure:', {
-          totalRows: excelData.length,
-          columns: Object.keys(excelData[0] || {}),
-          sampleData: excelData.slice(0, 3)
+        console.log('[FileUpload] Parsed data structure:', {
+          totalRows: parsedData.length,
+          columns: Object.keys(parsedData[0] || {}),
+          sampleData: parsedData.slice(0, 3)
         });
         setAnalysisStatus(prev => ({ ...prev, [file.name]: 'error' }));
         setErrorMessages(prev => ({ ...prev, [file.name]: 'OpenAI API key not configured. Check console for parsed data.' }));
@@ -56,7 +71,7 @@ const FileUpload = ({ onFilesUploaded, uploadedFiles, onAnalysisComplete }: File
       
       // Analyze with OpenAI
       console.log('[FileUpload] Sending to OpenAI for analysis...');
-      const analysis = await analyzeExcelData(excelData);
+      const analysis = await analyzeExcelData(parsedData);
       console.log('[FileUpload] Analysis complete:', analysis);
       
       // Cache the result
@@ -84,11 +99,12 @@ const FileUpload = ({ onFilesUploaded, uploadedFiles, onAnalysisComplete }: File
     
     // Process Excel files
     for (const file of acceptedFiles) {
-      if (file.type.includes('excel') || file.type.includes('spreadsheet') || file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
+      if (file.type.includes('excel') || file.type.includes('spreadsheet') || file.type.includes('csv') || 
+          file.name.toLowerCase().match(/\.(xlsx|xls|xlsm|xlsb|csv)$/)) {
         setProcessingFiles(prev => [...prev, file.name]);
         setAnalysisStatus(prev => ({ ...prev, [file.name]: 'processing' }));
         // Process asynchronously without blocking
-        processExcelFile(file);
+        processDataFile(file);
       } else {
         // For non-Excel files, just mark as completed after a delay
         setProcessingFiles(prev => [...prev, file.name]);
@@ -116,9 +132,12 @@ const FileUpload = ({ onFilesUploaded, uploadedFiles, onAnalysisComplete }: File
     onDrop,
     accept: {
       'application/pdf': ['.pdf'],
-      'application/vnd.ms-excel': ['.xls'],
+      'application/vnd.ms-excel': ['.xls'], 
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
+      'application/vnd.ms-excel.sheet.macroEnabled.12': ['.xlsm'],
+      'application/vnd.ms-excel.sheet.binary.macroEnabled.12': ['.xlsb'],
       'text/csv': ['.csv'],
+      'text/plain': ['.txt'],
       'image/*': ['.png', '.jpg', '.jpeg']
     },
     multiple: true
@@ -131,8 +150,8 @@ const FileUpload = ({ onFilesUploaded, uploadedFiles, onAnalysisComplete }: File
 
   const getFileIcon = (file: File) => {
     if (file.type.includes('pdf')) return '📄';
-    if (file.type.includes('excel') || file.type.includes('spreadsheet')) return '📊';
-    if (file.type.includes('csv')) return '📈';
+    if (file.type.includes('excel') || file.type.includes('spreadsheet') || file.name.toLowerCase().match(/\.(xls|xlsx|xlsm|xlsb)$/)) return '📊';
+    if (file.type.includes('csv') || file.name.toLowerCase().endsWith('.csv')) return '📈';
     if (file.type.includes('image')) return '🖼️';
     return '📁';
   };
@@ -164,7 +183,7 @@ const FileUpload = ({ onFilesUploaded, uploadedFiles, onAnalysisComplete }: File
           or click to browse your computer
         </p>
         <p className="text-sm text-gray-500">
-          Supports PDF, Excel, CSV, and image files
+          Supports Excel (.xlsx, .xls, .xlsm), CSV, PDF, and image files
         </p>
       </div>
 
