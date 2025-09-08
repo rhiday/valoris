@@ -1,5 +1,4 @@
 import type { SpendAnalysis, SummaryMetrics, ExcelRow } from '../types';
-import { extractVendorName, extractSpendAmount, extractCategory, extractSegment } from '../utils/dataExtraction';
 import { handleApiError, logError, getErrorMessage } from '../utils/errorHandling';
 
 // N8n API endpoints from environment variables
@@ -161,9 +160,9 @@ function mapToSpendAnalysis(_step1Data: any, step2Data: any): SpendAnalysis[] {
   console.log('📊 Processing', analysisData.length, 'vendors from API');
   
   return analysisData.map((item: any, index: number) => {
-    // Map n8n response fields to dashboard format
-    const vendorName = item.itemName || item.vendor || item.vendorName || item.name || item.supplier || `Vendor ${index + 1}`;
-    const pastSpend = Number(item.spend || item.price || item.pastSpend || item.amount || 0);
+    // Map n8n response fields to dashboard format - using exact field names from n8n
+    const vendorName = item.itemName || `Vendor ${index + 1}`;
+    const pastSpend = Number(item.spend || 0);  // n8n returns spend as a number already (e.g., 349.81)
     
     // Calculate projected spend (5% increase assumption)
     const projectedSpend = pastSpend * 1.05;
@@ -198,10 +197,10 @@ function mapToSpendAnalysis(_step1Data: any, step2Data: any): SpendAnalysis[] {
     
     const savingsRange = `€${minSavings.toLocaleString()} to €${maxSavings.toLocaleString()}`;
     
-    // Map alternatives with proper structure
+    // Map alternatives with proper structure - using exact n8n field names
     const alternatives = (item.alternatives || []).map((alt: any) => ({
-      vendor: alt.vendor || alt.supplier || 'Alternative Vendor',
-      estimatedPrice: alt.price || alt.estimatedPrice || 'Price on request',
+      vendor: alt.vendor || 'Alternative Vendor',
+      estimatedPrice: alt.price || 'Price on request',
       feasibility: alt.feasibility || 'Contact vendor for details'
     }));
     
@@ -214,9 +213,9 @@ function mapToSpendAnalysis(_step1Data: any, step2Data: any): SpendAnalysis[] {
     return {
       id: item.uniqueId || `vendor-${index + 1}`,
       vendor: vendorName,
-      segment: item.category || 'Operations', // n8n 'category' -> dashboard 'segment'
-      category: item.subCategory || item.category || 'Hardware', // n8n 'subCategory' -> dashboard 'category'
-      type: item.subCategory || 'Industrial Equipment',
+      segment: 'Operations', // Default segment for dashboard
+      category: item.subCategory || item.category || 'Hardware', // Use n8n's category fields
+      type: item.category || 'MRO', // n8n returns "MRO" in category field
       item: vendorName + ' Analysis',
       pastSpend: pastSpend,
       projectedSpend: Math.round(projectedSpend * 100) / 100,
@@ -258,75 +257,6 @@ function generateSummaryMetrics(analysis: SpendAnalysis[]): SummaryMetrics {
   };
 }
 
-/**
- * Generate mock data based on input Excel data
- */
-function generateMockData(excelData: ExcelRow[]): ExternalApiResponse {
-  console.log('🎭 Generating mock data for demo...');
-  
-  // Create enhanced analysis based on input data - process ALL vendors
-  const mockAnalysis: SpendAnalysis[] = excelData.map((row, index) => {
-    // Check if this is preprocessed data (has 'vendor' and 'spend' fields) or raw Excel
-    const isPreprocessed = row.vendor && row.spend !== undefined;
-    
-    const vendorName = isPreprocessed ? String(row.vendor || '') : (extractVendorName(row) || `Vendor ${index + 1}`);
-    const baseSpend = isPreprocessed ? Number(row.spend || 0) : (extractSpendAmount(row) || (50000 + Math.random() * 400000));
-    const actualSavings = isPreprocessed ? Number(row.potentialSavings || 0) : 0;
-    const savingsPercent = isPreprocessed ? String(row.savingsPercentage || '15%') : '15%';
-    
-    // Use actual values when available, standard estimates otherwise
-    const projectedSpend = isPreprocessed && row.projectedSpend ? 
-      Number(row.projectedSpend) : baseSpend - Math.abs(actualSavings || baseSpend * 0.15);
-    
-    const segment = isPreprocessed ? String(row.segment || 'Operations') : (extractSegment(row) || 'Operations');
-    const category = isPreprocessed ? String(row.category || 'Hardware') : (extractCategory(row) || 'Hardware');
-    
-    return {
-      id: `vendor-${index + 1}`,
-      vendor: vendorName,
-      segment: segment,
-      category: category,
-      type: isPreprocessed ? String(row.productInfo || category) : 'Enterprise Solution',
-      item: `${vendorName} Analysis`,
-      pastSpend: Math.round(baseSpend * 100) / 100,
-      projectedSpend: Math.round(projectedSpend * 100) / 100,
-      projectedChange: savingsPercent,
-      savingsRange: actualSavings !== 0 ? 
-        `€${Math.abs(actualSavings).toLocaleString()}` : 
-        `€${Math.round(baseSpend * 0.12).toLocaleString()} to €${Math.round(baseSpend * 0.25).toLocaleString()}`,
-      savingsPercentage: savingsPercent,
-      confidence: Math.round((0.85 + Math.random() * 0.15) * 100) / 100,
-      alternatives: [
-        {
-          vendor: `Alternative ${index + 1}A`,
-          estimatedPrice: `€${Math.round(baseSpend * (0.75 + Math.random() * 0.15)).toLocaleString()}`,
-          feasibility: 'High - verified compatibility'
-        },
-        {
-          vendor: `Alternative ${index + 1}B`, 
-          estimatedPrice: `€${Math.round(baseSpend * (0.60 + Math.random() * 0.20)).toLocaleString()}`,
-          feasibility: 'Medium - requires integration assessment'
-        },
-        {
-          vendor: `Market Leader ${index + 1}`,
-          estimatedPrice: `€${Math.round(baseSpend * (0.80 + Math.random() * 0.10)).toLocaleString()}`,
-          feasibility: 'High - industry standard solution'
-        }
-      ],
-      details: {
-        description: 'Standard procurement analysis with cost optimization opportunities',
-        implementation: 'Review contract terms and explore alternatives',
-        timeline: `${30 + Math.round(Math.random() * 60)} days`,
-        riskLevel: Math.random() > 0.7 ? 'Medium' : 'Low' as any
-      }
-    };
-  });
-
-  const summary = generateSummaryMetrics(mockAnalysis);
-
-  return { analysis: mockAnalysis, summary };
-}
-
 
 /**
  * Main function: Process Excel data through n8n APIs
@@ -364,15 +294,8 @@ export async function processWithNormalAPIs(excelData: ExcelRow[]): Promise<Exte
     
   } catch (error) {
     logError('N8nAPI', error);
-    console.warn('🔄 Live APIs unavailable, using mock data for demo:', getErrorMessage(error));
-    
-    console.log('🎭 Falling back to Demo Mode...');
-    const mockResult = generateMockData(excelData);
-    
-    console.log('✅ Analysis Complete with Demo Data!');
-    console.log('Records processed:', mockResult.analysis.length, '| Total spend: €' + mockResult.summary.pastSpend.toLocaleString());
-    
-    return mockResult;
+    console.error('❌ N8n API Error:', getErrorMessage(error));
+    throw error; // Let the error bubble up instead of returning mock data
   }
 }
 

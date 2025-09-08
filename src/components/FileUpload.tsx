@@ -18,6 +18,7 @@ const FileUpload = ({ onFilesUploaded, uploadedFiles, onAnalysisComplete }: File
   const [errorMessages, setErrorMessages] = useState<Record<string, string>>({});
   const [lastAnalysisData, setLastAnalysisData] = useState<{ analysis: SpendAnalysis[], summary: SummaryMetrics } | null>(null);
   const [accumulatedData, setAccumulatedData] = useState<any[]>([]);
+  const [isProcessingAPI, setIsProcessingAPI] = useState(false);
 
   const processDataFile = async (file: File) => {
     console.log(`[FileUpload] Starting to process data file: ${file.name}, type: ${file.type}`);
@@ -83,9 +84,10 @@ const FileUpload = ({ onFilesUploaded, uploadedFiles, onAnalysisComplete }: File
   };
 
   const processAllAccumulatedData = async () => {
-    if (accumulatedData.length === 0) return;
+    if (accumulatedData.length === 0 || isProcessingAPI) return;
     
     console.log('[FileUpload] Processing all accumulated data:', accumulatedData.length, 'records');
+    setIsProcessingAPI(true);
     
     try {
       console.log('[FileUpload] Using Standard Analysis with n8n APIs...');
@@ -98,6 +100,8 @@ const FileUpload = ({ onFilesUploaded, uploadedFiles, onAnalysisComplete }: File
     } catch (error) {
       console.error('[FileUpload] Error processing combined data:', error);
       return null;
+    } finally {
+      setIsProcessingAPI(false);
     }
   };
 
