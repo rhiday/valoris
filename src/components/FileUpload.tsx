@@ -2,8 +2,8 @@ import { useState, useCallback } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Upload, X, CheckCircle, AlertCircle, ArrowRight } from 'lucide-react';
-import { parseExcelFile, parseCsvFile, analyzeExcelData, hashFile, getCachedAnalysis, testOpenAIConnection } from '../services/openai';
-import { processWithExternalAPIs } from '../services/externalApiDemo';
+import { parseExcelFile, parseCsvFile, hashFile, getCachedAnalysis } from '../services/openai';
+import { processWithExternalAPIs, processWithNormalAPIs } from '../services/externalApiDemo';
 import type { SpendAnalysis, SummaryMetrics } from '../types';
 
 interface FileUploadProps {
@@ -94,27 +94,8 @@ const FileUpload = ({ onFilesUploaded, uploadedFiles, onAnalysisComplete, useEnh
         console.log('[FileUpload] Using Enhanced Analysis with external APIs...');
         analysis = await processWithExternalAPIs(accumulatedData);
       } else {
-        // Check if we have OpenAI API key
-        if (!import.meta.env.VITE_OPENAI_API_KEY) {
-          console.warn('[FileUpload] No OpenAI API key found. Please set VITE_OPENAI_API_KEY in .env file');
-          console.log('[FileUpload] Accumulated data structure:', {
-            totalRows: accumulatedData.length,
-            columns: Object.keys(accumulatedData[0] || {}),
-            sampleData: accumulatedData.slice(0, 3)
-          });
-          return null;
-        }
-        
-        // Test OpenAI connectivity first
-        console.log('[FileUpload] Using Standard Analysis with OpenAI...');
-        const isConnected = await testOpenAIConnection();
-        if (!isConnected) {
-          console.error('[FileUpload] OpenAI API connection failed - check API key and network');
-          return null;
-        }
-        
-        // Analyze with OpenAI
-        analysis = await analyzeExcelData(accumulatedData);
+        console.log('[FileUpload] Using Standard Analysis with external APIs...');
+        analysis = await processWithNormalAPIs(accumulatedData);
       }
       
       console.log('[FileUpload] Combined analysis complete:', analysis);

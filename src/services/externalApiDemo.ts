@@ -2,9 +2,13 @@ import type { SpendAnalysis, SummaryMetrics, ExcelRow } from '../types';
 import { extractVendorName, extractSpendAmount, extractCategory, extractSegment } from '../utils/dataExtraction';
 import { handleApiError, logError, getErrorMessage } from '../utils/errorHandling';
 
-// Your colleague's API endpoints
-const STEP1_API_URL = 'https://kenriippa.app.n8n.cloud/webhook/59ba9c89-d9ba-4422-a1fe-a96b4e5ef5b0';
-const STEP2_API_URL = 'https://kenriippa.app.n8n.cloud/webhook/b584496f-c724-4528-a73a-d8c59668ffe4';
+// Enhanced mode API endpoints
+const ENHANCED_STEP1_API_URL = 'https://kenriippa.app.n8n.cloud/webhook/59ba9c89-d9ba-4422-a1fe-a96b4e5ef5b0';
+const ENHANCED_STEP2_API_URL = 'https://kenriippa.app.n8n.cloud/webhook/b584496f-c724-4528-a73a-d8c59668ffe4';
+
+// Normal mode API endpoints  
+const NORMAL_STEP1_API_URL = 'https://kenriippa.app.n8n.cloud/webhook/0bbb216c-d8e9-4e6d-961b-1241ec5c7bcb';
+const NORMAL_STEP2_API_URL = 'https://kenriippa.app.n8n.cloud/webhook/cdbfeea8-e5d0-4ce8-81ec-e4f532c5dd1b';
 // Note: This is a demo key - in production, use environment variables
 const API_KEY = 'Y2mqY#lfHL2Yi[Pasted text #1 +27 lines]W9RZWlO11tGmTEV*u';
 
@@ -49,7 +53,7 @@ async function callStep1Api(excelData: ExcelRow[]): Promise<any> {
   
   const csvData = convertExcelToCsvString(excelData);
   
-  const response = await fetch(STEP1_API_URL, {
+  const response = await fetch(ENHANCED_STEP1_API_URL, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -75,7 +79,7 @@ async function callStep1Api(excelData: ExcelRow[]): Promise<any> {
  */
 async function callStep2Api(normalizedData: any): Promise<any> {
   
-  const response = await fetch(STEP2_API_URL, {
+  const response = await fetch(ENHANCED_STEP2_API_URL, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -88,6 +92,58 @@ async function callStep2Api(normalizedData: any): Promise<any> {
     const errorText = await response.text();
     console.error('[ExternalAPI] Step 2 failed:', response.status, errorText);
     throw handleApiError(response, errorText, 'Step 2 API');
+  }
+
+  const result = await response.json();
+  return result;
+}
+
+/**
+ * Call Normal Mode Step 1: Excel → Table Format (Data Normalization)
+ */
+async function callNormalStep1Api(excelData: ExcelRow[]): Promise<any> {
+  
+  const csvData = convertExcelToCsvString(excelData);
+  
+  const response = await fetch(NORMAL_STEP1_API_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'API-KEY': API_KEY,
+    },
+    body: JSON.stringify({
+      csv_data: csvData
+    })
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error('[NormalAPI] Step 1 failed:', response.status, errorText);
+    throw handleApiError(response, errorText, 'Normal Step 1 API');
+  }
+
+  const result = await response.json();
+  return result;
+}
+
+/**
+ * Call Normal Mode Step 2: Table Enrichment (find additional info, suggest alternatives)
+ */
+async function callNormalStep2Api(normalizedData: any): Promise<any> {
+  
+  const response = await fetch(NORMAL_STEP2_API_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'API-KEY': API_KEY,
+    },
+    body: JSON.stringify(normalizedData)
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error('[NormalAPI] Step 2 failed:', response.status, errorText);
+    throw handleApiError(response, errorText, 'Normal Step 2 API');
   }
 
   const result = await response.json();
@@ -289,6 +345,42 @@ export async function processWithExternalAPIs(excelData: ExcelRow[]): Promise<Ex
     const mockResult = generateEnhancedMockData(excelData);
     
     console.log('✅ Enhanced Analysis Complete with Demo Data!');
+    console.log('Records processed:', mockResult.analysis.length, '| Total spend: €' + mockResult.summary.pastSpend.toLocaleString());
+    
+    return mockResult;
+  }
+}
+
+/**
+ * Main function: Process Excel data through normal mode external APIs
+ */
+export async function processWithNormalAPIs(excelData: ExcelRow[]): Promise<ExternalApiResponse> {
+  console.log('🚀 Starting Normal Analysis with External APIs...');
+  console.log('Processing', excelData.length, 'records');
+
+  try {
+    // Step 1: Data Normalization
+    const step1Result = await callNormalStep1Api(excelData);
+    const step2Result = await callNormalStep2Api(step1Result);
+    const analysis = mapToSpendAnalysis(step1Result, step2Result);
+    const summary = generateSummaryMetrics(analysis);
+    
+    console.log('✅ Normal Analysis Complete with Live APIs!');
+    console.log('Records processed:', analysis.length, '| Total spend: €' + summary.pastSpend.toLocaleString());
+    
+    return {
+      analysis,
+      summary
+    };
+    
+  } catch (error) {
+    logError('NormalAPI', error);
+    console.warn('🔄 Live APIs unavailable, using mock data for demo:', getErrorMessage(error));
+    
+    console.log('🎭 Falling back to Demo Mode...');
+    const mockResult = generateEnhancedMockData(excelData);
+    
+    console.log('✅ Normal Analysis Complete with Demo Data!');
     console.log('Records processed:', mockResult.analysis.length, '| Total spend: €' + mockResult.summary.pastSpend.toLocaleString());
     
     return mockResult;
