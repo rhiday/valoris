@@ -1,102 +1,14 @@
 import type { SpendAnalysis, SummaryMetrics } from '../types';
 
 const OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY || '';
+const N8N_NORMALIZATION_URL = import.meta.env.VITE_N8N_NORMALIZATION_URL || '';
+const N8N_ENRICHMENT_URL = import.meta.env.VITE_N8N_ENRICHMENT_URL || '';
+const N8N_KEY = import.meta.env?.VITE_N8N_KEY as string || 'KEY';
 
 interface AnalysisResponse {
   analysis: SpendAnalysis[];
   summary: SummaryMetrics;
 }
-
-// STAGE 1: Data Normalization Prompt
-const NORMALIZATION_PROMPT = `You are a procurement data analyst. Normalize the provided Excel data into a structured format.
-
-Task: Analyze uploaded procurement data and normalize into structured format.
-
-Return a JSON object with this EXACT structure:
-
-{
-  "normalizedData": [
-    {
-      "id": "vendor-1",
-      "vendorName": "Microsoft Corporation",
-      "category": "Software", 
-      "subCategory": "Office Suite",
-      "annualSpend": 450000,
-      "contractDetails": "3-year enterprise agreement, expires Dec 2024",
-      "department": "IT",
-      "additionalInfo": "300 licenses, Office 365 E3 plan"
-    }
-  ]
-}
-
-RULES:
-1. Create one entry for EACH vendor in the data
-2. Category: Software, Cloud, Services, Hardware, or Other
-3. Sub-category: specific type (Office suite, CRM, Consulting, etc.)
-4. Annual Spend: total yearly cost in EUR (numbers only)
-5. Department: IT, Sales, Marketing, HR, Operations, or Finance
-6. Contract Details: terms, renewal dates, usage metrics if available
-7. Additional Info: concatenate other relevant fields
-8. Use existing IDs or generate "vendor-###"
-
-Return ONLY the JSON object, no markdown, no explanation.`;
-
-// STAGE 2: Optimization Analysis Prompt  
-const OPTIMIZATION_PROMPT = `You are a procurement optimization expert. Analyze normalized vendor data and provide optimization recommendations.
-
-Based on the normalized vendor data provided, return a JSON object with this EXACT structure:
-
-{
-  "analysis": [
-    {
-      "id": "vendor-1",
-      "vendor": "Microsoft Corporation",
-      "segment": "IT",
-      "category": "Software",
-      "type": "Office Suite", 
-      "item": "MS 365 E3",
-      "pastSpend": 450000,
-      "projectedSpend": 495000,
-      "projectedChange": "+10%",
-      "savingsRange": "€22,500 to €49,500",
-      "savingsPercentage": "-5 to -10%",
-      "confidence": 0.92,
-      "alternatives": [
-        {
-          "vendor": "Google Workspace",
-          "estimatedPrice": "€380,000",
-          "feasibility": "High - similar features, 30-day migration"
-        }
-      ],
-      "details": {
-        "description": "Optimize licenses based on actual usage patterns",
-        "implementation": "Audit user activity, remove unused licenses, negotiate volume discount",
-        "timeline": "30-45 days",
-        "riskLevel": "Low"
-      }
-    }
-  ],
-  "summary": {
-    "pastSpend": 450000,
-    "projectedSpend": 495000,
-    "potentialSavings": {
-      "min": 24750,
-      "max": 74250
-    },
-    "roi": 67
-  }
-}
-
-RULES:
-1. Use the normalized data as input for optimization analysis
-2. Provide 1-2 alternatives per vendor with realistic pricing
-3. Calculate projected spend as past spend * 1.08 to 1.15 (8-15% growth)
-4. Include feasibility assessment for each alternative
-5. Confidence: 0.5 to 1.0 based on optimization potential
-6. All numbers must be actual numbers, not strings
-7. Summary must aggregate ALL vendors
-
-Return ONLY the JSON object, no markdown, no explanation.`;
 
 // Test OpenAI API connectivity
 async function testOpenAIConnection(): Promise<boolean> {
@@ -120,7 +32,7 @@ async function testOpenAIConnection(): Promise<boolean> {
   }
 }
 
-export async function analyzeExcelData(excelData: any[]): Promise<AnalysisResponse> {
+export async function analyzeExcelData(excelData: Record<string, unknown>[]): Promise<AnalysisResponse> {
   if (!OPENAI_API_KEY) {
     console.error('OpenAI API key not found. Using mock data.');
     throw new Error('OpenAI API key not configured');
@@ -136,7 +48,7 @@ export async function analyzeExcelData(excelData: any[]): Promise<AnalysisRespon
   }
 
   // Create the request promise and store it to prevent duplicates
-  const requestPromise = performAnalysis(excelData, dataHash);
+  const requestPromise = performAnalysis(excelData);
   activeRequests.set(dataHash, requestPromise);
   
   try {
@@ -148,7 +60,7 @@ export async function analyzeExcelData(excelData: any[]): Promise<AnalysisRespon
   }
 }
 
-async function performAnalysis(excelData: any[], _dataHash: string): Promise<AnalysisResponse> {
+async function performAnalysis(excelData: Record<string, unknown>[]): Promise<AnalysisResponse> {
   // Test API connection first
   console.log('[OpenAI] Testing API connection...');
   const isConnected = await testOpenAIConnection();
@@ -163,7 +75,7 @@ async function performAnalysis(excelData: any[], _dataHash: string): Promise<Ana
   const cleanedData = preprocessExcelData(excelData);
   console.log('[OpenAI] Cleaned data:', cleanedData.slice(0, 3));
   
-  const shouldUseMarkdown = cleanedData.length === 0 || cleanedData.filter(row => row.spend > 0).length < 2;
+  const shouldUseMarkdown = cleanedData.length === 0 || cleanedData.filter(row => (row.spend as number) > 0).length < 2;
   
   let finalData;
   if (shouldUseMarkdown) {
@@ -186,8 +98,8 @@ async function performAnalysis(excelData: any[], _dataHash: string): Promise<Ana
       columns: Object.keys(finalData[0] || {}),
       dataQuality: {
         totalVendors: sampleData.filter(row => row.vendor).length,
-        withSpendData: sampleData.filter(row => row.spend > 0).length,
-        avgSpend: sampleData.reduce((sum, row) => sum + (row.spend || 0), 0) / sampleData.length
+        withSpendData: sampleData.filter(row => (row.spend as number) > 0).length,
+        avgSpend: sampleData.reduce((sum, row) => sum + ((row.spend as number) || 0), 0) / sampleData.length
       }
     };
     const jsonSize = JSON.stringify(promptData).length;
@@ -203,120 +115,50 @@ async function performAnalysis(excelData: any[], _dataHash: string): Promise<Ana
   try {
     // ============= STAGE 1: DATA NORMALIZATION =============
     console.log('\n=== STAGE 1: DATA NORMALIZATION ===');
-    console.log('[Stage 1] Sending data to OpenAI for normalization...');
-    
-    const stage1Response = await fetch('https://api.openai.com/v1/chat/completions', {
+    console.log('[Stage 1] Sending data to n8n for normalization...');
+    console.log(promptData);
+
+    const stage1Response = await fetch(N8N_NORMALIZATION_URL, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${OPENAI_API_KEY}`,
         'Content-Type': 'application/json',
+        'API-KEY': N8N_KEY,
       },
-      body: JSON.stringify({
-        model: 'gpt-3.5-turbo',
-        messages: [
-          {
-            role: 'system',
-            content: NORMALIZATION_PROMPT
-          },
-          {
-            role: 'user',
-            content: typeof promptData === 'string' 
-              ? `Normalize this procurement data:\n\n${promptData}`
-              : `Normalize this procurement data:\n\n${JSON.stringify(promptData, null, 2)}`
-          }
-        ],
-        response_format: { type: 'json_object' },
-        temperature: 0.3,
-        max_tokens: 3000
-      })
+      body: JSON.stringify(promptData),
     });
-
-    if (!stage1Response.ok) {
-      const errorText = await stage1Response.text();
-      console.error('[Stage 1] OpenAI API error details:');
-      console.error('Status:', stage1Response.status);
-      console.error('Response:', errorText);
-      console.error('Request body preview:', JSON.stringify({
-        model: 'gpt-3.5-turbo',
-        messages: [{
-          role: 'system',
-          content: NORMALIZATION_PROMPT.substring(0, 200) + '...'
-        }, {
-          role: 'user', 
-          content: (typeof promptData === 'string' ? promptData : JSON.stringify(promptData)).substring(0, 200) + '...'
-        }],
-        dataSize: typeof promptData === 'string' ? promptData.length : JSON.stringify(promptData).length
-      }, null, 2));
-      throw new Error(`Stage 1 OpenAI API error: ${stage1Response.status} - ${errorText}`);
-    }
+    
 
     const stage1Result = await stage1Response.json();
-    const stage1Content = stage1Result.choices[0].message.content;
+    //const stage1Content = stage1Result.choices[0].message.content;
+    const stage1Content = stage1Result.normalizedData;
     
     console.log('[Stage 1] Raw response:', stage1Content);
     
-    let normalizedData;
-    try {
-      const cleanStage1Content = stage1Content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-      normalizedData = JSON.parse(cleanStage1Content);
-      console.log('[Stage 1] ✓ NORMALIZED OUTPUT:', JSON.stringify(normalizedData, null, 2));
-    } catch (parseError) {
-      console.error('[Stage 1] Failed to parse normalization response:', parseError);
-      throw new Error('Failed to parse Stage 1 normalization response');
-    }
-
     // ============= STAGE 2: OPTIMIZATION ANALYSIS =============
     console.log('\n=== STAGE 2: OPTIMIZATION ANALYSIS ===');
     console.log('[Stage 2] Feeding normalized data into optimization analysis...');
-    
-    const stage2Response = await fetch('https://api.openai.com/v1/chat/completions', {
+
+    const stage2Response = await fetch(N8N_ENRICHMENT_URL, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${OPENAI_API_KEY}`,
         'Content-Type': 'application/json',
+        'API-KEY': N8N_KEY,
       },
-      body: JSON.stringify({
-        model: 'gpt-3.5-turbo',
-        messages: [
-          {
-            role: 'system',
-            content: OPTIMIZATION_PROMPT
-          },
-          {
-            role: 'user',
-            content: `Provide optimization recommendations for this normalized procurement data:\n\n${JSON.stringify(normalizedData, null, 2)}`
-          }
-        ],
-        response_format: { type: 'json_object' },
-        temperature: 0.3,
-        max_tokens: 4000
-      })
+      body: JSON.stringify(stage1Content),
     });
 
     if (!stage2Response.ok) {
       const errorText = await stage2Response.text();
-      console.error('[Stage 2] OpenAI API error details:');
+      console.error('[Stage 2] API error details:');
       console.error('Status:', stage2Response.status);
       console.error('Response:', errorText);
-      console.error('Normalized data size:', JSON.stringify(normalizedData).length, 'characters');
-      throw new Error(`Stage 2 OpenAI API error: ${stage2Response.status} - ${errorText}`);
+      throw new Error(`Stage 2 API error: ${stage2Response.status} - ${errorText}`);
     }
 
     const stage2Result = await stage2Response.json();
-    const stage2Content = stage2Result.choices[0].message.content;
+    console.log('[Stage 2] Response:', stage2Result);
     
-    console.log('[Stage 2] Raw response:', stage2Content);
-    
-    let analysis: AnalysisResponse;
-    try {
-      const cleanStage2Content = stage2Content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-      analysis = JSON.parse(cleanStage2Content) as AnalysisResponse;
-      console.log('[Stage 2] ✓ OPTIMIZATION OUTPUT:', JSON.stringify(analysis, null, 2));
-    } catch (parseError) {
-      console.error('[Stage 2] Failed to parse optimization response:', parseError);
-      console.error('[Stage 2] Raw content:', stage2Content);
-      throw new Error('Failed to parse Stage 2 optimization response');
-    }
+    const analysis = stage2Result;
     
     // Validate the response structure
     if (!analysis.analysis || !Array.isArray(analysis.analysis)) {
@@ -330,10 +172,11 @@ async function performAnalysis(excelData: any[], _dataHash: string): Promise<Ana
     }
 
     // Add unique IDs if not present
-    analysis.analysis = analysis.analysis.map((item, index) => ({
+    analysis.analysis = analysis.analysis.map((item: Record<string, unknown>, index: number) => ({
       ...item,
       id: item.id || `vendor-${index + 1}`
     }));
+
 
     console.log('\n=== TWO-STAGE ANALYSIS COMPLETE ===');
     console.log('[Final] Returning optimized analysis with', analysis.analysis.length, 'vendors');
@@ -346,7 +189,7 @@ async function performAnalysis(excelData: any[], _dataHash: string): Promise<Ana
 }
 
 // Lightweight function to parse Excel without blocking UI
-export async function parseExcelFile(file: File): Promise<any[]> {
+export async function parseExcelFile(file: File): Promise<Record<string, unknown>[]> {
   // Dynamically import xlsx to keep initial bundle small
   const XLSX = await import('xlsx');
   
@@ -382,8 +225,8 @@ export async function parseExcelFile(file: File): Promise<any[]> {
           if (alternativeData.length > 0) {
             console.log('[Excel] Alternative parsing successful, converting format');
             // Convert from column-letter format to more readable format
-            const convertedData = alternativeData.map((row: any) => {
-              const newRow: any = {};
+            const convertedData = (alternativeData as Record<string, unknown>[]).map((row: Record<string, unknown>) => {
+              const newRow: Record<string, unknown> = {};
               Object.keys(row).forEach((key, index) => {
                 const columnName = row['A'] && index === 0 ? 'Header' : `Column_${key}`;
                 newRow[columnName] = row[key];
@@ -397,7 +240,7 @@ export async function parseExcelFile(file: File): Promise<any[]> {
         
         console.log('[Excel] Parsed', jsonData.length, 'rows with', Object.keys(jsonData[0] || {}).length, 'columns');
         
-        resolve(jsonData);
+        resolve(jsonData as Record<string, unknown>[]);
       } catch (error) {
         reject(error);
       }
@@ -409,7 +252,7 @@ export async function parseExcelFile(file: File): Promise<any[]> {
 }
 
 // Function to parse CSV files with support for various delimiters and formats
-export async function parseCsvFile(file: File): Promise<any[]> {
+export async function parseCsvFile(file: File): Promise<Record<string, unknown>[]> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     
@@ -438,7 +281,7 @@ export async function parseCsvFile(file: File): Promise<any[]> {
         for (let i = 1; i < lines.length; i++) {
           const values = lines[i].split(delimiter);
           if (values.length > 1) { // Skip empty lines
-            const row: any = {};
+            const row: Record<string, unknown> = {};
             headers.forEach((header, index) => {
               const value = values[index]?.trim() || '';
               // Convert European decimal format (0,514) to US format (0.514) for numbers
@@ -522,7 +365,7 @@ export function cacheAnalysis(fileHash: string, analysis: AnalysisResponse): voi
 }
 
 // Preprocess Excel data to standardize field names and clean data
-function preprocessExcelData(rawData: any[]): any[] {
+function preprocessExcelData(rawData: Record<string, unknown>[]): Record<string, unknown>[] {
   if (!rawData || rawData.length === 0) {
     console.warn('[OpenAI] No data to preprocess');
     return [];
@@ -587,7 +430,7 @@ function preprocessExcelData(rawData: any[]): any[] {
 }
 
 // Extract field value from various possible column names
-function extractField(row: any, possibleNames: string[]): string {
+function extractField(row: Record<string, unknown>, possibleNames: string[]): string {
   for (const name of possibleNames) {
     // Try exact match first
     if (row[name] !== undefined && row[name] !== null) {
@@ -622,7 +465,7 @@ function parseSpendAmount(spendText: string): number {
   if (europeanPattern.test(text.replace(/[€$£¥₹\s]/g, ''))) {
     console.log('[parseSpendAmount] Detected European format');
     // Remove currency symbols and spaces, then convert comma to dot
-    let cleaned = text
+    const cleaned = text
       .replace(/[€$£¥₹\s]/g, '') // Remove currency symbols and spaces
       .replace(/\./g, '') // Remove thousands separators (dots in European format)
       .replace(',', '.'); // Convert decimal comma to dot
@@ -675,7 +518,7 @@ function normalizeSegment(segment: string): string {
 }
 
 // Convert Excel data to markdown table format for better AI comprehension
-function convertToMarkdownTable(rawData: any[]): string {
+function convertToMarkdownTable(rawData: Record<string, unknown>[]): string {
   if (!rawData || rawData.length === 0) {
     return 'No data available';
   }
@@ -693,7 +536,7 @@ function convertToMarkdownTable(rawData: any[]): string {
   
   // Create markdown table header
   let markdown = `# Procurement Data Analysis\n\n`;
-  markdown += `**Total Records:** ${rawData.length}\n\n`;
+  markdown += `**Total Records:** ${rawData.length - 1}\n\n`;
   markdown += `| ${columns.join(' | ')} |\n`;
   markdown += `| ${columns.map(() => '---').join(' | ')} |\n`;
   
@@ -726,13 +569,13 @@ function convertToMarkdownTable(rawData: any[]): string {
   if (rawData.length > 12) {
     markdown += `\n*Note: Showing top 12 highest-spend vendors of ${rawData.length} total records*\n`;
   }
-  
+  /*
   markdown += `\n## Instructions\n`;
   markdown += `Please analyze this procurement data table and identify:\n`;
   markdown += `1. Vendor/supplier information\n`;
   markdown += `2. Annual spend amounts\n`;
   markdown += `3. Categories and segments\n`;
-  markdown += `4. Potential cost optimization opportunities\n`;
+  markdown += `4. Potential cost optimization opportunities\n`;*/
   
   console.log(`[Markdown] Generated table with top ${limitedData.length} vendors (from ${rawData.length} total)`);
   console.log('[Markdown] Sample:', markdown.slice(0, 500) + '...');
