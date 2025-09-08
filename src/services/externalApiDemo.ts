@@ -199,24 +199,39 @@ function generateSummaryMetrics(analysis: SpendAnalysis[]): SummaryMetrics {
  */
 function generateEnhancedMockData(excelData: any[]): ExternalApiResponse {
   console.log('[ExternalAPI] 🎭 Generating enhanced mock data for demo...');
+  console.log('[ExternalAPI] Input data sample:', excelData[0]);
   
-  // Create enhanced analysis based on input data
-  const mockAnalysis: SpendAnalysis[] = excelData.slice(0, 5).map((row, index) => {
-    const vendorName = extractVendorName(row) || `Enhanced Vendor ${index + 1}`;
-    const baseSpend = extractSpendAmount(row) || (50000 + Math.random() * 400000);
+  // Create enhanced analysis based on input data - process ALL vendors
+  const mockAnalysis: SpendAnalysis[] = excelData.map((row, index) => {
+    // Check if this is preprocessed data (has 'vendor' and 'spend' fields) or raw Excel
+    const isPreprocessed = row.vendor && row.spend !== undefined;
+    
+    const vendorName = isPreprocessed ? row.vendor : (extractVendorName(row) || `Vendor ${index + 1}`);
+    const baseSpend = isPreprocessed ? row.spend : (extractSpendAmount(row) || (50000 + Math.random() * 400000));
+    const actualSavings = isPreprocessed ? row.potentialSavings : 0;
+    const savingsPercent = isPreprocessed ? row.savingsPercentage : '15%';
+    
+    // Use actual values when available, enhanced estimates otherwise
+    const projectedSpend = isPreprocessed && row.projectedSpend ? 
+      row.projectedSpend : baseSpend - Math.abs(actualSavings || baseSpend * 0.15);
+    
+    const segment = isPreprocessed ? row.segment : (extractSegment(row) || 'Operations');
+    const category = isPreprocessed ? row.category : (extractCategory(row) || 'Hardware');
     
     return {
       id: `enhanced-${index + 1}`,
       vendor: vendorName,
-      segment: extractSegment(row) || 'IT',
-      category: extractCategory(row) || 'Software',
-      type: 'Enterprise Solution',
-      item: `${vendorName} (Enhanced with Internet Data)`,
-      pastSpend: Math.round(baseSpend),
-      projectedSpend: Math.round(baseSpend * (1.08 + Math.random() * 0.07)),
-      projectedChange: `+${Math.round(8 + Math.random() * 7)}%`,
-      savingsRange: `€${Math.round(baseSpend * 0.12).toLocaleString()} to €${Math.round(baseSpend * 0.25).toLocaleString()}`,
-      savingsPercentage: '-12 to -25%',
+      segment: segment,
+      category: category,
+      type: isPreprocessed ? row.productInfo || category : 'Enterprise Solution',
+      item: `${vendorName} (Enhanced Analysis)`,
+      pastSpend: Math.round(baseSpend * 100) / 100,
+      projectedSpend: Math.round(projectedSpend * 100) / 100,
+      projectedChange: savingsPercent,
+      savingsRange: actualSavings !== 0 ? 
+        `€${Math.abs(actualSavings).toLocaleString()}` : 
+        `€${Math.round(baseSpend * 0.12).toLocaleString()} to €${Math.round(baseSpend * 0.25).toLocaleString()}`,
+      savingsPercentage: savingsPercent,
       confidence: Math.round((0.85 + Math.random() * 0.15) * 100) / 100,
       alternatives: [
         {
