@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Upload, X, CheckCircle, AlertCircle, ArrowRight } from 'lucide-react';
-import { parseExcelFile, parseCsvFile, analyzeExcelData, hashFile, getCachedAnalysis, cacheAnalysis, testOpenAIConnection } from '../services/openai';
+import { parseExcelFile, parseCsvFile, analyzeExcelData, hashFile, getCachedAnalysis, testOpenAIConnection } from '../services/openai';
 import { processWithExternalAPIs } from '../services/externalApiDemo';
 import type { SpendAnalysis, SummaryMetrics } from '../types';
 
@@ -19,7 +19,6 @@ const FileUpload = ({ onFilesUploaded, uploadedFiles, onAnalysisComplete, useEnh
   const [errorMessages, setErrorMessages] = useState<Record<string, string>>({});
   const [lastAnalysisData, setLastAnalysisData] = useState<{ analysis: SpendAnalysis[], summary: SummaryMetrics } | null>(null);
   const [accumulatedData, setAccumulatedData] = useState<any[]>([]);
-  const [filesProcessed, setFilesProcessed] = useState<Set<string>>(new Set());
 
   const processDataFile = async (file: File) => {
     console.log(`[FileUpload] Starting to process data file: ${file.name}, type: ${file.type}`);
@@ -67,7 +66,6 @@ const FileUpload = ({ onFilesUploaded, uploadedFiles, onAnalysisComplete, useEnh
       }));
       
       setAccumulatedData(prev => [...prev, ...fileDataWithSource]);
-      setFilesProcessed(prev => new Set([...prev, file.name]));
       setAnalysisStatus(prev => ({ ...prev, [file.name]: 'completed' }));
       
       console.log('[FileUpload] File data added to accumulation. Total records:', accumulatedData.length + fileDataWithSource.length);
