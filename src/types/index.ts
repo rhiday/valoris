@@ -8,8 +8,8 @@ export interface CompanyData {
 export interface SpendAnalysis {
   id: string;
   vendor: string;
-  segment: string;
-  category: string;
+  segment: string; // 'IT' | 'Sales' | 'Marketing' | 'HR' | 'Finance' | 'Operations' | string
+  category: string; // 'Software' | 'Hardware' | 'Services' | 'Cloud' | 'CRM' | 'Marketing' | 'HR' | 'Other' | string
   type: string;
   item: string;
   pastSpend: number;
@@ -19,12 +19,14 @@ export interface SpendAnalysis {
   savingsPercentage: string;
   confidence: number;
   alternatives?: VendorAlternative[];
-  details: {
-    description: string;
-    implementation: string;
-    timeline: string;
-    riskLevel: 'Low' | 'Medium' | 'High';
-  };
+  details: AnalysisDetails;
+}
+
+export interface AnalysisDetails {
+  description: string;
+  implementation: string;
+  timeline: string;
+  riskLevel: 'Low' | 'Medium' | 'High';
 }
 
 export interface VendorAlternative {
@@ -39,7 +41,24 @@ export interface UploadedFile {
   size: number;
   type: string;
   status: 'uploading' | 'processing' | 'completed' | 'error';
-  extractedData?: any;
+  extractedData?: ExcelRow[];
+}
+
+export interface ExcelRow {
+  [key: string]: string | number | undefined;
+}
+
+export interface ProcessingStatus {
+  [fileName: string]: 'processing' | 'completed' | 'error';
+}
+
+export interface ErrorMessages {
+  [fileName: string]: string;
+}
+
+export interface CachedAnalysis {
+  analysis: SpendAnalysis[];
+  summary: SummaryMetrics;
 }
 
 export interface SummaryMetrics {

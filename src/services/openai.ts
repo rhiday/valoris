@@ -1,4 +1,6 @@
-import type { SpendAnalysis, SummaryMetrics } from '../types';
+import type { SpendAnalysis, SummaryMetrics, ExcelRow } from '../types';
+import { groupByVendor } from '../utils/dataExtraction';
+import { handleApiError, handleConfigError, handleParsingError, handleNetworkError, logError } from '../utils/errorHandling';
 
 const OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY || '';
 const N8N_NORMALIZATION_URL = import.meta.env.VITE_N8N_NORMALIZATION_URL || '';
@@ -20,14 +22,14 @@ async function testOpenAIConnection(): Promise<boolean> {
     });
     
     if (response.ok) {
-      console.log('[OpenAI] API connection test: ✅ Success');
       return true;
     } else {
-      console.error('[OpenAI] API connection test: ❌ Failed -', response.status);
+      const errorText = await response.text();
+      console.error('[OpenAI] API connection test: ❌ Failed -', response.status, errorText);
       return false;
     }
   } catch (error) {
-    console.error('[OpenAI] API connection test: ❌ Network error -', error);
+    logError('OpenAI Connection Test', error);
     return false;
   }
 }
@@ -35,7 +37,7 @@ async function testOpenAIConnection(): Promise<boolean> {
 export async function analyzeExcelData(excelData: Record<string, unknown>[]): Promise<AnalysisResponse> {
   if (!OPENAI_API_KEY) {
     console.error('OpenAI API key not found. Using mock data.');
-    throw new Error('OpenAI API key not configured');
+    throw handleConfigError('OpenAI API key not configured');
   }
 
   // Create a hash of the data to prevent duplicate requests
@@ -62,24 +64,20 @@ export async function analyzeExcelData(excelData: Record<string, unknown>[]): Pr
 
 async function performAnalysis(excelData: Record<string, unknown>[]): Promise<AnalysisResponse> {
   // Test API connection first
-  console.log('[OpenAI] Testing API connection...');
   const isConnected = await testOpenAIConnection();
   if (!isConnected) {
-    throw new Error('OpenAI API connection failed - check your API key and network');
+    throw handleNetworkError('OpenAI API connection failed', new Error('Check your API key and network'));
   }
 
-  console.log('\n=== STARTING TWO-STAGE ANALYSIS ===');
-  console.log('[OpenAI] Raw Excel data received:', excelData.slice(0, 3));
+  console.log('🚀 Starting two-stage analysis...');
 
   // Prepare data for analysis
-  const cleanedData = preprocessExcelData(excelData);
-  console.log('[OpenAI] Cleaned data:', cleanedData.slice(0, 3));
+  const cleanedData = groupByVendor(excelData);
   
   const shouldUseMarkdown = cleanedData.length === 0 || cleanedData.filter(row => (row.spend as number) > 0).length < 2;
   
   let finalData;
   if (shouldUseMarkdown) {
-    console.log('[OpenAI] Using markdown approach for better data extraction');
     finalData = convertToMarkdownTable(excelData);
   } else {
     finalData = cleanedData;
@@ -89,7 +87,6 @@ async function performAnalysis(excelData: Record<string, unknown>[]): Promise<An
   let promptData;
   if (typeof finalData === 'string') {
     promptData = finalData;
-    console.log('[OpenAI] Using markdown table format, size:', promptData.length, 'characters');
   } else {
     const sampleData = finalData.slice(0, 100);
     promptData = {
@@ -102,14 +99,12 @@ async function performAnalysis(excelData: Record<string, unknown>[]): Promise<An
         avgSpend: sampleData.reduce((sum, row) => sum + ((row.spend as number) || 0), 0) / sampleData.length
       }
     };
-    const jsonSize = JSON.stringify(promptData).length;
-    console.log('[OpenAI] Using JSON format with', promptData.dataQuality.totalVendors, 'vendors, size:', jsonSize, 'characters');
   }
 
   // Check data size to prevent API errors
   const dataSize = typeof promptData === 'string' ? promptData.length : JSON.stringify(promptData).length;
   if (dataSize > 50000) {
-    console.warn('[OpenAI] Large data size detected:', dataSize, 'characters - this may cause API errors');
+    console.warn('⚠️ Large data size detected:', dataSize, 'characters - analysis may take longer');
   }
 
   try {
@@ -135,7 +130,6 @@ async function performAnalysis(excelData: Record<string, unknown>[]): Promise<An
     console.log('[Stage 1] Raw response:', stage1Content);
     
     // ============= STAGE 2: OPTIMIZATION ANALYSIS =============
-    console.log('\n=== STAGE 2: OPTIMIZATION ANALYSIS ===');
     console.log('[Stage 2] Feeding normalized data into optimization analysis...');
 
     const stage2Response = await fetch(N8N_ENRICHMENT_URL, {
@@ -183,7 +177,7 @@ async function performAnalysis(excelData: Record<string, unknown>[]): Promise<An
     
     return analysis;
   } catch (error) {
-    console.error('Error in two-stage analysis:', error);
+    logError('Two-stage Analysis', error);
     throw error;
   }
 }
