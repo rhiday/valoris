@@ -1,4 +1,6 @@
-import type { SpendAnalysis, SummaryMetrics } from '../types';
+import type { SpendAnalysis, SummaryMetrics, ExcelRow } from '../types';
+import { extractVendorName, extractSpendAmount, extractCategory, extractSegment } from '../utils/dataExtraction';
+import { handleApiError, logError, getErrorMessage } from '../utils/errorHandling';
 
 // Your colleague's API endpoints
 const STEP1_API_URL = 'https://kenriippa.app.n8n.cloud/webhook/59ba9c89-d9ba-4422-a1fe-a96b4e5ef5b0';
@@ -14,7 +16,7 @@ interface ExternalApiResponse {
 /**
  * Convert Excel data to CSV format for Step 1 API
  */
-function convertExcelToCsvString(excelData: any[]): string {
+function convertExcelToCsvString(excelData: ExcelRow[]): string {
   if (!excelData || excelData.length === 0) {
     return '';
   }
@@ -43,8 +45,7 @@ function convertExcelToCsvString(excelData: any[]): string {
 /**
  * Call Step 1: Excel → Table Format (Data Normalization)
  */
-async function callStep1Api(excelData: any[]): Promise<any> {
-  console.log('[ExternalAPI] Step 1: Normalizing data with colleague\'s API...');
+async function callStep1Api(excelData: ExcelRow[]): Promise<any> {
   
   const csvData = convertExcelToCsvString(excelData);
   
@@ -62,11 +63,10 @@ async function callStep1Api(excelData: any[]): Promise<any> {
   if (!response.ok) {
     const errorText = await response.text();
     console.error('[ExternalAPI] Step 1 failed:', response.status, errorText);
-    throw new Error(`Step 1 API error: ${response.status} - ${errorText}`);
+    throw handleApiError(response, errorText, 'Step 1 API');
   }
 
   const result = await response.json();
-  console.log('[ExternalAPI] Step 1 success:', result);
   return result;
 }
 
@@ -74,7 +74,6 @@ async function callStep1Api(excelData: any[]): Promise<any> {
  * Call Step 2: Table Enrichment (find additional info, suggest alternatives)
  */
 async function callStep2Api(normalizedData: any): Promise<any> {
-  console.log('[ExternalAPI] Step 2: Enriching with market data...');
   
   const response = await fetch(STEP2_API_URL, {
     method: 'POST',
@@ -88,11 +87,10 @@ async function callStep2Api(normalizedData: any): Promise<any> {
   if (!response.ok) {
     const errorText = await response.text();
     console.error('[ExternalAPI] Step 2 failed:', response.status, errorText);
-    throw new Error(`Step 2 API error: ${response.status} - ${errorText}`);
+    throw handleApiError(response, errorText, 'Step 2 API');
   }
 
   const result = await response.json();
-  console.log('[ExternalAPI] Step 2 success:', result);
   return result;
 }
 
@@ -100,9 +98,6 @@ async function callStep2Api(normalizedData: any): Promise<any> {
  * Convert external API response to our SpendAnalysis format
  */
 function mapToSpendAnalysis(_step1Data: any, _step2Data: any): SpendAnalysis[] {
-  console.log('[ExternalAPI] Mapping response to SpendAnalysis format...');
-  
-  // This is a demo mapping - you'll need to adjust based on actual API response structure
   const mockAnalysis: SpendAnalysis[] = [
     {
       id: 'ext-1',
@@ -140,7 +135,7 @@ function mapToSpendAnalysis(_step1Data: any, _step2Data: any): SpendAnalysis[] {
       id: 'ext-2',
       vendor: 'Salesforce',
       segment: 'Sales',
-      category: 'CRM',
+      category: 'Software',
       type: 'Customer Relationship Management',
       item: 'Salesforce Professional (Enhanced)',
       pastSpend: 185000,
@@ -197,33 +192,32 @@ function generateSummaryMetrics(analysis: SpendAnalysis[]): SummaryMetrics {
 /**
  * Generate enhanced mock data based on input Excel data
  */
-function generateEnhancedMockData(excelData: any[]): ExternalApiResponse {
-  console.log('[ExternalAPI] 🎭 Generating enhanced mock data for demo...');
-  console.log('[ExternalAPI] Input data sample:', excelData[0]);
+function generateEnhancedMockData(excelData: ExcelRow[]): ExternalApiResponse {
+  console.log('🎭 Generating enhanced mock data for demo...');
   
   // Create enhanced analysis based on input data - process ALL vendors
   const mockAnalysis: SpendAnalysis[] = excelData.map((row, index) => {
     // Check if this is preprocessed data (has 'vendor' and 'spend' fields) or raw Excel
     const isPreprocessed = row.vendor && row.spend !== undefined;
     
-    const vendorName = isPreprocessed ? row.vendor : (extractVendorName(row) || `Vendor ${index + 1}`);
-    const baseSpend = isPreprocessed ? row.spend : (extractSpendAmount(row) || (50000 + Math.random() * 400000));
-    const actualSavings = isPreprocessed ? row.potentialSavings : 0;
-    const savingsPercent = isPreprocessed ? row.savingsPercentage : '15%';
+    const vendorName = isPreprocessed ? String(row.vendor || '') : (extractVendorName(row) || `Vendor ${index + 1}`);
+    const baseSpend = isPreprocessed ? Number(row.spend || 0) : (extractSpendAmount(row) || (50000 + Math.random() * 400000));
+    const actualSavings = isPreprocessed ? Number(row.potentialSavings || 0) : 0;
+    const savingsPercent = isPreprocessed ? String(row.savingsPercentage || '15%') : '15%';
     
     // Use actual values when available, enhanced estimates otherwise
     const projectedSpend = isPreprocessed && row.projectedSpend ? 
-      row.projectedSpend : baseSpend - Math.abs(actualSavings || baseSpend * 0.15);
+      Number(row.projectedSpend) : baseSpend - Math.abs(actualSavings || baseSpend * 0.15);
     
-    const segment = isPreprocessed ? row.segment : (extractSegment(row) || 'Operations');
-    const category = isPreprocessed ? row.category : (extractCategory(row) || 'Hardware');
+    const segment = isPreprocessed ? String(row.segment || 'Operations') : (extractSegment(row) || 'Operations');
+    const category = isPreprocessed ? String(row.category || 'Hardware') : (extractCategory(row) || 'Hardware');
     
     return {
       id: `enhanced-${index + 1}`,
       vendor: vendorName,
       segment: segment,
       category: category,
-      type: isPreprocessed ? row.productInfo || category : 'Enterprise Solution',
+      type: isPreprocessed ? String(row.productInfo || category) : 'Enterprise Solution',
       item: `${vendorName} (Enhanced Analysis)`,
       pastSpend: Math.round(baseSpend * 100) / 100,
       projectedSpend: Math.round(projectedSpend * 100) / 100,
@@ -264,96 +258,23 @@ function generateEnhancedMockData(excelData: any[]): ExternalApiResponse {
   return { analysis: mockAnalysis, summary };
 }
 
-// Helper functions for extracting data from Excel
-function extractVendorName(row: any): string {
-  console.log('[extractVendorName] Row keys:', Object.keys(row));
-  console.log('[extractVendorName] Row data:', row);
-  
-  // Try exact field names first
-  if (row.Supplier) return String(row.Supplier).trim();
-  if (row.supplier) return String(row.supplier).trim();
-  if (row.vendor) return String(row.vendor).trim();
-  
-  // Then try pattern matching
-  const keys = Object.keys(row).filter(key => 
-    key.toLowerCase().includes('vendor') || 
-    key.toLowerCase().includes('supplier') ||
-    key.toLowerCase().includes('company')
-  );
-  
-  console.log('[extractVendorName] Matching keys:', keys);
-  const result = keys.length > 0 ? String(row[keys[0]] || '').trim() : '';
-  console.log('[extractVendorName] Result:', result);
-  return result;
-}
-
-function extractSpendAmount(row: any): number {
-  console.log('[extractSpendAmount] Row keys:', Object.keys(row));
-  
-  // Try exact field names first
-  if (row.Total_Current_Cost) return Number(row.Total_Current_Cost) || 0;
-  if (row['Total Current Cost']) return Number(row['Total Current Cost']) || 0;
-  if (row.spend) return Number(row.spend) || 0;
-  
-  // Then try pattern matching
-  const keys = Object.keys(row).filter(key => 
-    key.toLowerCase().includes('spend') || 
-    key.toLowerCase().includes('cost') ||
-    key.toLowerCase().includes('amount')
-  );
-  
-  console.log('[extractSpendAmount] Matching keys:', keys);
-  
-  if (keys.length > 0) {
-    const value = String(row[keys[0]] || '').replace(/[^\d.,]/g, '');
-    const result = parseFloat(value.replace(',', '.')) || 0;
-    console.log('[extractSpendAmount] Result:', result);
-    return result;
-  }
-  return 0;
-}
-
-function extractCategory(row: any): string {
-  const keys = Object.keys(row).filter(key => 
-    key.toLowerCase().includes('category') || 
-    key.toLowerCase().includes('type')
-  );
-  return keys.length > 0 ? String(row[keys[0]] || 'Software').trim() : 'Software';
-}
-
-function extractSegment(row: any): string {
-  const keys = Object.keys(row).filter(key => 
-    key.toLowerCase().includes('segment') || 
-    key.toLowerCase().includes('department')
-  );
-  return keys.length > 0 ? String(row[keys[0]] || 'IT').trim() : 'IT';
-}
 
 /**
  * Main function: Process Excel data through both external APIs
  */
-export async function processWithExternalAPIs(excelData: any[]): Promise<ExternalApiResponse> {
-  console.log('\n🚀 Starting Enhanced Analysis with External APIs...');
-  console.log('[ExternalAPI] Processing', excelData.length, 'records');
+export async function processWithExternalAPIs(excelData: ExcelRow[]): Promise<ExternalApiResponse> {
+  console.log('🚀 Starting Enhanced Analysis with External APIs...');
+  console.log('Processing', excelData.length, 'records');
 
   try {
     // Step 1: Data Normalization
-    console.log('\n📊 Step 1: Data Normalization');
     const step1Result = await callStep1Api(excelData);
-    
-    // Step 2: Data Enrichment
-    console.log('\n🌐 Step 2: Market Data Enrichment');  
     const step2Result = await callStep2Api(step1Result);
-    
-    // Convert to our format
-    console.log('\n🔄 Converting to Valoris format');
     const analysis = mapToSpendAnalysis(step1Result, step2Result);
     const summary = generateSummaryMetrics(analysis);
     
-    console.log('\n✅ Enhanced Analysis Complete with Live APIs!');
-    console.log('- Records processed:', analysis.length);
-    console.log('- Total spend analyzed: €' + summary.pastSpend.toLocaleString());
-    console.log('- Enhanced savings potential: €' + summary.potentialSavings.min.toLocaleString() + ' - €' + summary.potentialSavings.max.toLocaleString());
+    console.log('✅ Enhanced Analysis Complete with Live APIs!');
+    console.log('Records processed:', analysis.length, '| Total spend: €' + summary.pastSpend.toLocaleString());
     
     return {
       analysis,
@@ -361,17 +282,14 @@ export async function processWithExternalAPIs(excelData: any[]): Promise<Externa
     };
     
   } catch (error) {
-    console.warn('[ExternalAPI] Live APIs unavailable, using enhanced mock data for demo:', error);
+    logError('ExternalAPI', error);
+    console.warn('🔄 Live APIs unavailable, using enhanced mock data for demo:', getErrorMessage(error));
     
-    // Fallback to enhanced mock data - perfect for demos!
-    console.log('\n🎭 Falling back to Enhanced Demo Mode...');
+    console.log('🎭 Falling back to Enhanced Demo Mode...');
     const mockResult = generateEnhancedMockData(excelData);
     
-    console.log('\n✅ Enhanced Analysis Complete with Demo Data!');
-    console.log('- Records processed:', mockResult.analysis.length);
-    console.log('- Total spend analyzed: €' + mockResult.summary.pastSpend.toLocaleString());
-    console.log('- Enhanced savings potential: €' + mockResult.summary.potentialSavings.min.toLocaleString() + ' - €' + mockResult.summary.potentialSavings.max.toLocaleString());
-    console.log('💡 Demo shows: Enhanced alternatives, better savings rates, internet-sourced data');
+    console.log('✅ Enhanced Analysis Complete with Demo Data!');
+    console.log('Records processed:', mockResult.analysis.length, '| Total spend: €' + mockResult.summary.pastSpend.toLocaleString());
     
     return mockResult;
   }
@@ -397,7 +315,7 @@ export async function testExternalAPIConnection(): Promise<boolean> {
     console.log('[ExternalAPI] ✅ Connection test successful');
     return true;
   } catch (error) {
-    console.error('[ExternalAPI] ❌ Connection test failed:', error);
+    logError('ExternalAPI Connection Test', error);
     return false;
   }
 }

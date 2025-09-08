@@ -1,4 +1,6 @@
-import type { SpendAnalysis, SummaryMetrics } from '../types';
+import type { SpendAnalysis, SummaryMetrics, ExcelRow } from '../types';
+import { groupByVendor } from '../utils/dataExtraction';
+import { handleApiError, handleConfigError, handleParsingError, handleNetworkError, logError } from '../utils/errorHandling';
 
 const OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY || '';
 
@@ -101,7 +103,6 @@ Return ONLY the JSON object, no markdown, no explanation.`;
 // Test OpenAI API connectivity
 async function testOpenAIConnection(): Promise<boolean> {
   try {
-    console.log('[OpenAI] Testing API connectivity...');
     const response = await fetch('https://api.openai.com/v1/models', {
       headers: {
         'Authorization': `Bearer ${OPENAI_API_KEY}`,
@@ -109,7 +110,6 @@ async function testOpenAIConnection(): Promise<boolean> {
     });
     
     if (response.ok) {
-      console.log('[OpenAI] API connection test: ✅ Success - OpenAI API is working!');
       return true;
     } else {
       const errorText = await response.text();
@@ -117,7 +117,7 @@ async function testOpenAIConnection(): Promise<boolean> {
       return false;
     }
   } catch (error) {
-    console.error('[OpenAI] API connection test: ❌ Network error -', error);
+    logError('OpenAI Connection Test', error);
     return false;
   }
 }
@@ -125,10 +125,10 @@ async function testOpenAIConnection(): Promise<boolean> {
 // Export test function for debugging
 export { testOpenAIConnection };
 
-export async function analyzeExcelData(excelData: any[]): Promise<AnalysisResponse> {
+export async function analyzeExcelData(excelData: ExcelRow[]): Promise<AnalysisResponse> {
   if (!OPENAI_API_KEY) {
     console.error('OpenAI API key not found. Using mock data.');
-    throw new Error('OpenAI API key not configured');
+    throw handleConfigError('OpenAI API key not configured');
   }
 
   // Create a hash of the data to prevent duplicate requests
@@ -155,24 +155,20 @@ export async function analyzeExcelData(excelData: any[]): Promise<AnalysisRespon
 
 async function performAnalysis(excelData: any[], _dataHash: string): Promise<AnalysisResponse> {
   // Test API connection first
-  console.log('[OpenAI] Testing API connection...');
   const isConnected = await testOpenAIConnection();
   if (!isConnected) {
-    throw new Error('OpenAI API connection failed - check your API key and network');
+    throw handleNetworkError('OpenAI API connection failed', new Error('Check your API key and network'));
   }
 
-  console.log('\n=== STARTING TWO-STAGE ANALYSIS ===');
-  console.log('[OpenAI] Raw Excel data received:', excelData.slice(0, 3));
+  console.log('🚀 Starting two-stage analysis...');
 
   // Prepare data for analysis
-  const cleanedData = preprocessExcelData(excelData);
-  console.log('[OpenAI] Cleaned data:', cleanedData.slice(0, 3));
+  const cleanedData = groupByVendor(excelData);
   
   const shouldUseMarkdown = cleanedData.length === 0 || cleanedData.filter(row => row.spend > 0).length < 2;
   
   let finalData;
   if (shouldUseMarkdown) {
-    console.log('[OpenAI] Using markdown approach for better data extraction');
     finalData = convertToMarkdownTable(excelData);
   } else {
     finalData = cleanedData;
@@ -182,7 +178,6 @@ async function performAnalysis(excelData: any[], _dataHash: string): Promise<Ana
   let promptData;
   if (typeof finalData === 'string') {
     promptData = finalData;
-    console.log('[OpenAI] Using markdown table format, size:', promptData.length, 'characters');
   } else {
     const sampleData = finalData.slice(0, 100);
     promptData = {
@@ -195,19 +190,16 @@ async function performAnalysis(excelData: any[], _dataHash: string): Promise<Ana
         avgSpend: sampleData.reduce((sum, row) => sum + (row.spend || 0), 0) / sampleData.length
       }
     };
-    const jsonSize = JSON.stringify(promptData).length;
-    console.log('[OpenAI] Using JSON format with', promptData.dataQuality.totalVendors, 'vendors, size:', jsonSize, 'characters');
   }
 
   // Check data size to prevent API errors
   const dataSize = typeof promptData === 'string' ? promptData.length : JSON.stringify(promptData).length;
   if (dataSize > 50000) {
-    console.warn('[OpenAI] Large data size detected:', dataSize, 'characters - this may cause API errors');
+    console.warn('⚠️ Large data size detected:', dataSize, 'characters - analysis may take longer');
   }
 
   try {
     // ============= STAGE 1: DATA NORMALIZATION =============
-    console.log('\n=== STAGE 1: DATA NORMALIZATION ===');
     console.log('[Stage 1] Sending data to OpenAI for normalization...');
     
     const stage1Response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -252,7 +244,7 @@ async function performAnalysis(excelData: any[], _dataHash: string): Promise<Ana
         }],
         dataSize: typeof promptData === 'string' ? promptData.length : JSON.stringify(promptData).length
       }, null, 2));
-      throw new Error(`Stage 1 OpenAI API error: ${stage1Response.status} - ${errorText}`);
+      throw handleApiError(stage1Response, errorText, 'Stage 1 OpenAI API');
     }
 
     const stage1Result = await stage1Response.json();
@@ -267,11 +259,10 @@ async function performAnalysis(excelData: any[], _dataHash: string): Promise<Ana
       console.log('[Stage 1] ✓ NORMALIZED OUTPUT:', JSON.stringify(normalizedData, null, 2));
     } catch (parseError) {
       console.error('[Stage 1] Failed to parse normalization response:', parseError);
-      throw new Error('Failed to parse Stage 1 normalization response');
+      throw handleParsingError('Stage 1 normalization response');
     }
 
     // ============= STAGE 2: OPTIMIZATION ANALYSIS =============
-    console.log('\n=== STAGE 2: OPTIMIZATION ANALYSIS ===');
     console.log('[Stage 2] Feeding normalized data into optimization analysis...');
     
     const stage2Response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -304,7 +295,7 @@ async function performAnalysis(excelData: any[], _dataHash: string): Promise<Ana
       console.error('Status:', stage2Response.status);
       console.error('Response:', errorText);
       console.error('Normalized data size:', JSON.stringify(normalizedData).length, 'characters');
-      throw new Error(`Stage 2 OpenAI API error: ${stage2Response.status} - ${errorText}`);
+      throw handleApiError(stage2Response, errorText, 'Stage 2 OpenAI API');
     }
 
     const stage2Result = await stage2Response.json();
@@ -320,7 +311,7 @@ async function performAnalysis(excelData: any[], _dataHash: string): Promise<Ana
     } catch (parseError) {
       console.error('[Stage 2] Failed to parse optimization response:', parseError);
       console.error('[Stage 2] Raw content:', stage2Content);
-      throw new Error('Failed to parse Stage 2 optimization response');
+      throw handleParsingError('Stage 2 optimization response');
     }
     
     // Validate the response structure
@@ -340,18 +331,18 @@ async function performAnalysis(excelData: any[], _dataHash: string): Promise<Ana
       id: item.id || `vendor-${index + 1}`
     }));
 
-    console.log('\n=== TWO-STAGE ANALYSIS COMPLETE ===');
+    console.log('✅ Two-stage analysis complete');
     console.log('[Final] Returning optimized analysis with', analysis.analysis.length, 'vendors');
     
     return analysis;
   } catch (error) {
-    console.error('Error in two-stage analysis:', error);
+    logError('Two-stage Analysis', error);
     throw error;
   }
 }
 
 // Lightweight function to parse Excel without blocking UI
-export async function parseExcelFile(file: File): Promise<any[]> {
+export async function parseExcelFile(file: File): Promise<ExcelRow[]> {
   // Dynamically import xlsx to keep initial bundle small
   const XLSX = await import('xlsx');
   
@@ -402,7 +393,7 @@ export async function parseExcelFile(file: File): Promise<any[]> {
         
         console.log('[Excel] Parsed', jsonData.length, 'rows with', Object.keys(jsonData[0] || {}).length, 'columns');
         
-        resolve(jsonData);
+        resolve(jsonData as ExcelRow[]);
       } catch (error) {
         reject(error);
       }
@@ -414,7 +405,7 @@ export async function parseExcelFile(file: File): Promise<any[]> {
 }
 
 // Function to parse CSV files with support for various delimiters and formats
-export async function parseCsvFile(file: File): Promise<any[]> {
+export async function parseCsvFile(file: File): Promise<ExcelRow[]> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     
@@ -526,87 +517,6 @@ export function cacheAnalysis(fileHash: string, analysis: AnalysisResponse): voi
   }
 }
 
-// Preprocess Excel data to standardize field names and clean data
-function preprocessExcelData(rawData: any[]): any[] {
-  if (!rawData || rawData.length === 0) {
-    console.warn('[OpenAI] No data to preprocess');
-    return [];
-  }
-
-  console.log('[OpenAI] Preprocessing Excel data, sample row:', rawData[0]);
-  
-  // Group by supplier to sum up values for same vendors
-  const supplierGroups: { [key: string]: any[] } = {};
-  
-  rawData.forEach(row => {
-    const supplier = row.Supplier || row.supplier || `Unknown Supplier`;
-    if (!supplierGroups[supplier]) {
-      supplierGroups[supplier] = [];
-    }
-    supplierGroups[supplier].push(row);
-  });
-
-  return Object.entries(supplierGroups).map(([supplier, rows]) => {
-    // Sum up costs and savings for same supplier
-    const totalCurrentCost = rows.reduce((sum, row) => sum + (row.Total_Current_Cost || 0), 0);
-    const totalMarketCost = rows.reduce((sum, row) => sum + (row.Total_Market_Cost || 0), 0);
-    const totalPotentialSavings = rows.reduce((sum, row) => sum + (row.Potential_Savings || 0), 0);
-    
-    // Calculate average percentage (weighted by cost)
-    const avgSavingsPercentage = totalCurrentCost > 0 ? 
-      ((totalPotentialSavings / totalCurrentCost) * 100).toFixed(1) + '%' : '0%';
-
-    // Get representative data from first row of the group
-    const firstRow = rows[0];
-    
-    const cleanedRow = {
-      vendor: supplier,
-      spend: Math.round(totalCurrentCost * 100) / 100, // Round to 2 decimal places
-      potentialSavings: Math.round(totalPotentialSavings * 100) / 100,
-      savingsPercentage: avgSavingsPercentage,
-      projectedSpend: Math.round(totalMarketCost * 100) / 100,
-      category: normalizeCategory(firstRow.Category || 'Other'),
-      segment: normalizeSegment(firstRow.Department || 'Operations'),
-      productInfo: rows.map(r => r.Product_Name).filter((v, i, a) => a.indexOf(v) === i).join(', '), // Unique products
-      originalData: rows // Keep all original rows for reference
-    };
-
-    console.log(`[Preprocessing] ${supplier}: €${cleanedRow.spend} → €${cleanedRow.projectedSpend}, savings: €${cleanedRow.potentialSavings} (${cleanedRow.savingsPercentage})`);
-
-    return cleanedRow;
-  }).filter(row => row.vendor && row.spend > 0); // Only keep rows with vendor and spend data
-}
-
-
-// Normalize category to standard values
-function normalizeCategory(category: string): string {
-  if (!category) return 'Other';
-  
-  const cat = category.toLowerCase();
-  if (cat.includes('software') || cat.includes('saas') || cat.includes('application')) return 'Software';
-  if (cat.includes('cloud') || cat.includes('hosting') || cat.includes('infrastructure')) return 'Cloud';
-  if (cat.includes('service') || cat.includes('consulting') || cat.includes('support')) return 'Services';
-  if (cat.includes('hardware') || cat.includes('equipment') || cat.includes('device')) return 'Hardware';
-  if (cat.includes('marketing') || cat.includes('advertising')) return 'Marketing';
-  if (cat.includes('hr') || cat.includes('human resources')) return 'HR';
-  
-  return category; // Return original if no match
-}
-
-// Normalize segment to standard departments
-function normalizeSegment(segment: string): string {
-  if (!segment) return 'Operations';
-  
-  const seg = segment.toLowerCase();
-  if (seg.includes('it') || seg.includes('tech') || seg.includes('information')) return 'IT';
-  if (seg.includes('sales') || seg.includes('revenue')) return 'Sales';
-  if (seg.includes('marketing') || seg.includes('brand')) return 'Marketing';
-  if (seg.includes('hr') || seg.includes('human') || seg.includes('people')) return 'HR';
-  if (seg.includes('finance') || seg.includes('accounting') || seg.includes('financial')) return 'Finance';
-  if (seg.includes('operations') || seg.includes('ops')) return 'Operations';
-  
-  return segment; // Return original if no match
-}
 
 // Convert Excel data to markdown table format for better AI comprehension
 function convertToMarkdownTable(rawData: any[]): string {
